@@ -41,3 +41,26 @@ def test_chat_valida_corpo_da_requisicao():
     resposta = cliente.post("/chat", json={})
 
     assert resposta.status_code == 422
+
+
+def test_websocket_streama_pedacos_e_avisa_o_fim(monkeypatch):
+    chamadas = []
+
+    async def fake_perguntar_stream(mensagem):
+        chamadas.append(mensagem)
+        for pedaco in ["Ola", " mundo"]:
+            yield pedaco
+
+    monkeypatch.setattr(main.llm, "perguntar_stream", fake_perguntar_stream)
+
+    cliente = TestClient(main.app)
+    with cliente.websocket_connect("/ws") as websocket:
+        websocket.send_json({"mensagem": "oi"})
+        pedaco1 = websocket.receive_json()
+        pedaco2 = websocket.receive_json()
+        fim = websocket.receive_json()
+
+    assert chamadas == ["oi"]
+    assert pedaco1 == {"tipo": "pedaco", "texto": "Ola"}
+    assert pedaco2 == {"tipo": "pedaco", "texto": " mundo"}
+    assert fim == {"tipo": "fim"}

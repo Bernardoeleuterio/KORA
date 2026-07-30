@@ -3,6 +3,7 @@
 import logging
 import time
 from collections import deque
+from typing import AsyncIterator
 
 from google import genai
 from google.genai import types
@@ -88,3 +89,29 @@ def perguntar(
     resposta = client.models.generate_content(model=model, contents=pergunta, config=cfg)
     uso.registrar_uso(resposta.usage_metadata)
     return resposta
+
+
+async def perguntar_stream(
+    pergunta: str,
+    system_instruction: str | None = None,
+    model: str = MODELO_PADRAO,
+) -> AsyncIterator[str]:
+    """Envia uma pergunta ao Gemini e streama a resposta em pedacos de texto.
+
+    Nao aceita `tools`: no SDK google-genai instalado, o Function Calling
+    automatico perde a resposta da ferramenta quando combinado com streaming
+    (o resultado da chamada e sobrescrito pelo chunk final vazio, e a
+    resposta do modelo nunca chega). Para conversas que dependem das
+    ferramentas do Vault, use perguntar().
+    """
+    uso.registrar_chamada()
+
+    client = _get_client()
+    cfg = types.GenerateContentConfig(system_instruction=system_instruction)
+    ultima_metadata = None
+    stream = await client.aio.models.generate_content_stream(model=model, contents=pergunta, config=cfg)
+    async for chunk in stream:
+        if chunk.text:
+            yield chunk.text
+        ultima_metadata = chunk.usage_metadata
+    uso.registrar_uso(ultima_metadata)

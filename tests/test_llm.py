@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from backend.brain import llm
@@ -28,6 +30,33 @@ class FakeModels:
 class FakeClient:
     def __init__(self, response):
         self.models = FakeModels(response)
+
+
+class FakeStreamChunk:
+    def __init__(self, text, usage_metadata):
+        self.text = text
+        self.usage_metadata = usage_metadata
+
+
+class FakeAsyncModels:
+    def __init__(self, chunks):
+        self._chunks = chunks
+        self.chamadas = []
+
+    async def generate_content_stream(self, model, contents, config):
+        self.chamadas.append({"model": model, "contents": contents, "config": config})
+
+        async def gerador():
+            for chunk in self._chunks:
+                yield chunk
+
+        return gerador()
+
+
+class FakeStreamClient:
+    def __init__(self, chunks):
+        self.aio = type("FakeAio", (), {})()
+        self.aio.models = FakeAsyncModels(chunks)
 
 
 @pytest.fixture(autouse=True)
@@ -103,3 +132,29 @@ def test_uso_gemini_janela_desliza_apos_um_minuto(monkeypatch):
 
     uso.registrar_chamada()
     uso.registrar_chamada()
+
+
+def test_perguntar_stream_retorna_pedacos_e_registra_uso(monkeypatch):
+    monkeypatch.setattr(llm.config, "GEMINI_API_KEY", "chave-fake")
+    chunks = [
+        FakeStreamChunk("Ola", FakeUsageMetadata(5, 3)),
+        FakeStreamChunk(" mundo", FakeUsageMetadata(5, 6)),
+        FakeStreamChunk("", FakeUsageMetadata(5, 6)),
+    ]
+    fake_client = FakeStreamClient(chunks)
+    monkeypatch.setattr(llm, "_get_client", lambda: fake_client)
+
+    async def coletar():
+        return [pedaco async for pedaco in llm.perguntar_stream("oi")]
+
+    pedacos = asyncio.run(coletar())
+
+    assert pedacos == ["Ola", " mundo"]
+    assert llm.uso.total_chamadas == 1
+    assert llm.uso.total_tokens_prompt == 5
+    assert llm.uso.total_tokens_resposta == 6
+
+    chamada = fake_client.aio.models.chamadas[0]
+    assert chamada["model"] == llm.MODELO_PADRAO
+    assert chamada["contents"] == "oi"
+    assert chamada["config"].tools is None
