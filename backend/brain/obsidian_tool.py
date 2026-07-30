@@ -1,6 +1,8 @@
-"""Leitura de notas e listagem de arquivos/pastas do Vault do Obsidian."""
+"""Leitura, escrita e sincronizacao via Git de notas do Vault do Obsidian."""
 
 from pathlib import Path
+
+import git
 
 from backend import config
 
@@ -50,3 +52,35 @@ def list_folder(subfolder: str = "", vault_path: str | None = None) -> dict:
         "pastas": sorted(p.name for p in entradas if p.is_dir() and not p.name.startswith(".")),
         "arquivos": sorted(p.name for p in entradas if p.is_file() and not p.name.startswith(".")),
     }
+
+
+def _git_pull_rebase(root: Path) -> None:
+    repo = git.Repo(root)
+    repo.remotes.origin.pull(rebase=True)
+
+
+def _git_commit_and_push(root: Path, target: Path, message: str) -> None:
+    repo = git.Repo(root)
+    repo.index.add([str(target)])
+    repo.index.commit(message)
+    repo.remotes.origin.push()
+
+
+def write_note(
+    relative_path: str,
+    content: str,
+    commit_message: str | None = None,
+    vault_path: str | None = None,
+) -> Path:
+    """Cria ou edita uma nota e sincroniza a alteracao via Git (pull --rebase, add, commit, push)."""
+    root, target = _resolve_path(relative_path, vault_path)
+    _git_pull_rebase(root)
+
+    ja_existia = target.is_file()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(content, encoding="utf-8")
+
+    acao = "atualiza" if ja_existia else "cria"
+    mensagem = commit_message or f"docs: {acao} nota {relative_path}"
+    _git_commit_and_push(root, target, mensagem)
+    return target

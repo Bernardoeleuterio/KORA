@@ -1,3 +1,4 @@
+import git
 import pytest
 
 from backend.brain import obsidian_tool as ot
@@ -51,3 +52,71 @@ def test_list_folder_subpasta(vault):
 def test_list_notes_pasta_inexistente(vault):
     with pytest.raises(FileNotFoundError):
         ot.list_notes("NaoExiste", vault_path=str(vault))
+
+
+@pytest.fixture
+def vault_git(tmp_path):
+    remote_path = tmp_path / "remote.git"
+    git.Repo.init(str(remote_path), bare=True)
+
+    vault_path = tmp_path / "vault"
+    repo = git.Repo.init(str(vault_path))
+    with repo.config_writer() as cw:
+        cw.set_value("user", "name", "KORA Test")
+        cw.set_value("user", "email", "kora-test@example.com")
+    repo.create_remote("origin", str(remote_path))
+
+    (vault_path / "nota.md").write_text("conteudo inicial", encoding="utf-8")
+    repo.index.add(["nota.md"])
+    repo.index.commit("commit inicial")
+    repo.git.push("--set-upstream", "origin", repo.active_branch.name)
+
+    return vault_path
+
+
+def test_write_note_cria_arquivo_e_commita(vault_git):
+    caminho = ot.write_note("Diario/nova.md", "# Nova nota\nConteudo.", vault_path=str(vault_git))
+
+    assert caminho.is_file()
+    assert caminho.read_text(encoding="utf-8") == "# Nova nota\nConteudo."
+
+    repo = git.Repo(vault_git)
+    assert not repo.is_dirty(untracked_files=True)
+    assert "cria nota" in repo.head.commit.message
+
+
+def test_write_note_edita_arquivo_existente(vault_git):
+    ot.write_note("nota.md", "conteudo atualizado", vault_path=str(vault_git))
+
+    repo = git.Repo(vault_git)
+    assert (vault_git / "nota.md").read_text(encoding="utf-8") == "conteudo atualizado"
+    assert "atualiza nota" in repo.head.commit.message
+
+
+def test_write_note_faz_push_para_o_remote(vault_git):
+    ot.write_note("Diario/nova.md", "conteudo", vault_path=str(vault_git))
+
+    repo = git.Repo(vault_git)
+    branch = repo.active_branch.name
+    repo.remotes.origin.fetch()
+    assert repo.head.commit.hexsha == repo.remotes.origin.refs[branch].commit.hexsha
+
+
+def test_write_note_pull_rebase_antes_de_editar(vault_git):
+    repo_local = git.Repo(vault_git)
+    remote_url = repo_local.remotes.origin.url
+
+    outro_clone_path = vault_git.parent / "outro_clone"
+    outro = git.Repo.clone_from(remote_url, str(outro_clone_path))
+    with outro.config_writer() as cw:
+        cw.set_value("user", "name", "Outro Clone")
+        cw.set_value("user", "email", "outro@example.com")
+    (outro_clone_path / "concorrente.md").write_text("mudanca concorrente", encoding="utf-8")
+    outro.index.add(["concorrente.md"])
+    outro.index.commit("mudanca concorrente")
+    outro.remotes.origin.push()
+
+    ot.write_note("Diario/nova.md", "conteudo novo", vault_path=str(vault_git))
+
+    assert (vault_git / "concorrente.md").is_file()
+    assert (vault_git / "Diario" / "nova.md").is_file()
