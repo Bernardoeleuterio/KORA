@@ -43,6 +43,18 @@ def test_chat_valida_corpo_da_requisicao():
     assert resposta.status_code == 422
 
 
+def test_frontend_index_e_arquivos_estaticos_servidos():
+    cliente = TestClient(main.app)
+
+    pagina = cliente.get("/")
+    assert pagina.status_code == 200
+    assert "KORA" in pagina.text
+
+    script = cliente.get("/js/app.js")
+    assert script.status_code == 200
+    assert "WebSocket" in script.text
+
+
 def test_websocket_streama_pedacos_e_avisa_o_fim(monkeypatch):
     chamadas = []
 
@@ -63,4 +75,30 @@ def test_websocket_streama_pedacos_e_avisa_o_fim(monkeypatch):
     assert chamadas == ["oi"]
     assert pedaco1 == {"tipo": "pedaco", "texto": "Ola"}
     assert pedaco2 == {"tipo": "pedaco", "texto": " mundo"}
+    assert fim == {"tipo": "fim"}
+
+
+def test_websocket_avisa_erro_sem_derrubar_a_conexao(monkeypatch):
+    async def fake_perguntar_stream_com_erro(mensagem):
+        raise RuntimeError("cota da API excedida")
+        yield  # pragma: no cover - torna a funcao um gerador async
+
+    monkeypatch.setattr(main.llm, "perguntar_stream", fake_perguntar_stream_com_erro)
+
+    cliente = TestClient(main.app)
+    with cliente.websocket_connect("/ws") as websocket:
+        websocket.send_json({"mensagem": "oi"})
+        erro = websocket.receive_json()
+
+        # a conexao continua utilizavel apos o erro
+        async def fake_perguntar_stream_ok(mensagem):
+            yield "tudo bem agora"
+
+        monkeypatch.setattr(main.llm, "perguntar_stream", fake_perguntar_stream_ok)
+        websocket.send_json({"mensagem": "oi de novo"})
+        pedaco = websocket.receive_json()
+        fim = websocket.receive_json()
+
+    assert erro == {"tipo": "erro", "mensagem": "cota da API excedida"}
+    assert pedaco == {"tipo": "pedaco", "texto": "tudo bem agora"}
     assert fim == {"tipo": "fim"}

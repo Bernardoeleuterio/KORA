@@ -1,10 +1,15 @@
-"""Servidor FastAPI do KORA: rota HTTP simples de chat por texto."""
+"""Servidor FastAPI do KORA: rotas de chat (texto e WebSocket) e frontend estatico."""
+
+from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from backend import config
 from backend.brain import llm, tools
+
+DIRETORIO_FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
 
 app = FastAPI(title="KORA")
 
@@ -36,11 +41,17 @@ async def chat_websocket(websocket: WebSocket) -> None:
         while True:
             dados = await websocket.receive_json()
             mensagem = dados.get("mensagem", "")
-            async for pedaco in llm.perguntar_stream(mensagem):
-                await websocket.send_json({"tipo": "pedaco", "texto": pedaco})
-            await websocket.send_json({"tipo": "fim"})
+            try:
+                async for pedaco in llm.perguntar_stream(mensagem):
+                    await websocket.send_json({"tipo": "pedaco", "texto": pedaco})
+                await websocket.send_json({"tipo": "fim"})
+            except Exception as erro:
+                await websocket.send_json({"tipo": "erro", "mensagem": str(erro)})
     except WebSocketDisconnect:
         pass
+
+
+app.mount("/", StaticFiles(directory=DIRETORIO_FRONTEND, html=True), name="frontend")
 
 
 if __name__ == "__main__":

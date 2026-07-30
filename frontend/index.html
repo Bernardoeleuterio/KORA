@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KORA</title>
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            max-width: 640px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        #chat {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            min-height: 300px;
+            max-height: 60vh;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        .mensagem {
+            padding: 0.5rem 0.75rem;
+            border-radius: 8px;
+            max-width: 80%;
+            white-space: pre-wrap;
+        }
+        .mensagem-usuario {
+            align-self: flex-end;
+            background: #dbeafe;
+        }
+        .mensagem-kora {
+            align-self: flex-start;
+            background: #f1f5f9;
+        }
+        .mensagem-sistema {
+            align-self: center;
+            color: #64748b;
+            font-size: 0.85rem;
+        }
+        #formulario-chat {
+            display: flex;
+            gap: 0.5rem;
+        }
+        #campo-mensagem {
+            flex: 1;
+            padding: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <h1>KORA</h1>
+    <div id="chat"></div>
+    <form id="formulario-chat">
+        <input
+            type="text"
+            id="campo-mensagem"
+            placeholder="Digite sua mensagem..."
+            autocomplete="off"
+            disabled
+        />
+        <button type="submit" disabled>Enviar</button>
+    </form>
+    <script src="js/app.js"></script>
+</body>
+</html>
