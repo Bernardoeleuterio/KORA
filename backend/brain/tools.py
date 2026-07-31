@@ -46,4 +46,35 @@ def criar_ou_editar_nota(caminho_relativo: str, conteudo: str) -> str:
     return f"Nota salva em {caminho_relativo}"
 
 
-FERRAMENTAS = [ler_nota, listar_notas, listar_pasta, criar_ou_editar_nota]
+def buscar_notas_por_nome(termo: str) -> list[str]:
+    """Busca notas do Vault pelo nome do arquivo ou caminho, sem precisar do caminho exato.
+
+    Use esta ferramenta quando o usuario mencionar uma nota pelo assunto ou
+    nome aproximado (ex: "a nota sobre IA") em vez do caminho completo.
+
+    Args:
+        termo: parte do nome do arquivo ou caminho a procurar; pode usar curingas glob (*, ?).
+    """
+    return obsidian_tool.buscar_por_nome(termo)
+
+
+def buscar_notas_por_conteudo(termo: str) -> list[dict]:
+    """Busca notas do Vault cujo conteudo contem o termo, retornando caminho, linha e trecho.
+
+    Use esta ferramenta quando o usuario descrever o assunto de uma nota mas
+    o termo nao aparecer no nome/caminho do arquivo.
+
+    Args:
+        termo: palavra ou trecho a procurar no conteudo das notas.
+    """
+    return obsidian_tool.buscar_por_conteudo(termo)
+
+
+FERRAMENTAS = [
+    ler_nota,
+    listar_notas,
+    listar_pasta,
+    criar_ou_editar_nota,
+    buscar_notas_por_nome,
+    buscar_notas_por_conteudo,
+]

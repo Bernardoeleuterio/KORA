@@ -1,5 +1,6 @@
 """Leitura, escrita e sincronizacao via Git de notas do Vault do Obsidian."""
 
+import fnmatch
 from pathlib import Path
 
 import git
@@ -52,6 +53,37 @@ def list_folder(subfolder: str = "", vault_path: str | None = None) -> dict:
         "pastas": sorted(p.name for p in entradas if p.is_dir() and not p.name.startswith(".")),
         "arquivos": sorted(p.name for p in entradas if p.is_file() and not p.name.startswith(".")),
     }
+
+
+def buscar_por_nome(termo: str, vault_path: str | None = None) -> list[str]:
+    """Busca notas cujo caminho/nome de arquivo combina com o termo (estilo glob, sem diferenciar maiusculas/minusculas).
+
+    Se o termo nao tiver curingas (*, ?, [), ele e tratado como uma
+    substring (equivalente a `*termo*`), para nao exigir do chamador o
+    caminho ou o nome exato da nota.
+    """
+    padrao = termo if any(caractere in termo for caractere in "*?[") else f"*{termo}*"
+    padrao = padrao.lower()
+    return sorted(nota for nota in list_notes(vault_path=vault_path) if fnmatch.fnmatch(nota.lower(), padrao))
+
+
+def buscar_por_conteudo(termo: str, vault_path: str | None = None) -> list[dict]:
+    """Busca notas cujo conteudo contem o termo (sem diferenciar maiusculas/minusculas).
+
+    Retorna, para cada nota encontrada, o caminho, o numero da linha e o
+    trecho da primeira ocorrencia do termo.
+    """
+    termo_lower = termo.lower()
+    resultados = []
+    for caminho_relativo in list_notes(vault_path=vault_path):
+        conteudo = read_note(caminho_relativo, vault_path=vault_path)
+        for numero_linha, linha in enumerate(conteudo.splitlines(), start=1):
+            if termo_lower in linha.lower():
+                resultados.append(
+                    {"caminho": caminho_relativo, "linha": numero_linha, "trecho": linha.strip()}
+                )
+                break
+    return resultados
 
 
 def _git_pull_rebase(root: Path) -> None:

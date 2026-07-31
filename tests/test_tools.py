@@ -53,10 +53,39 @@ def test_criar_ou_editar_nota_chama_obsidian_tool(monkeypatch):
     assert chamadas == [("Diario/2026-07-30.md", "conteudo novo")]
 
 
-def test_ferramentas_registra_as_quatro_funcoes():
+def test_buscar_notas_por_nome_chama_obsidian_tool(monkeypatch):
+    chamadas = []
+    monkeypatch.setattr(
+        tools.obsidian_tool, "buscar_por_nome", lambda termo: chamadas.append(termo) or ["a.md"]
+    )
+
+    resultado = tools.buscar_notas_por_nome("IA")
+
+    assert resultado == ["a.md"]
+    assert chamadas == ["IA"]
+
+
+def test_buscar_notas_por_conteudo_chama_obsidian_tool(monkeypatch):
+    chamadas = []
+    resultado_esperado = [{"caminho": "a.md", "linha": 1, "trecho": "algo sobre IA"}]
+    monkeypatch.setattr(
+        tools.obsidian_tool,
+        "buscar_por_conteudo",
+        lambda termo: chamadas.append(termo) or resultado_esperado,
+    )
+
+    resultado = tools.buscar_notas_por_conteudo("IA")
+
+    assert resultado == resultado_esperado
+    assert chamadas == ["IA"]
+
+
+def test_ferramentas_registra_todas_as_funcoes():
     assert tools.FERRAMENTAS == [
         tools.ler_nota,
         tools.listar_notas,
         tools.listar_pasta,
         tools.criar_ou_editar_nota,
+        tools.buscar_notas_por_nome,
+        tools.buscar_notas_por_conteudo,
     ]

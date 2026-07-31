@@ -54,6 +54,41 @@ def test_list_notes_pasta_inexistente(vault):
         ot.list_notes("NaoExiste", vault_path=str(vault))
 
 
+def test_buscar_por_nome_com_termo_simples(vault):
+    resultado = ot.buscar_por_nome("nota", vault_path=str(vault))
+    assert resultado == ["Projetos/IA/nota.md"]
+
+
+def test_buscar_por_nome_ignora_maiusculas_minusculas(vault):
+    resultado = ot.buscar_por_nome("NOTA", vault_path=str(vault))
+    assert resultado == ["Projetos/IA/nota.md"]
+
+
+def test_buscar_por_nome_com_padrao_glob_explicito(vault):
+    resultado = ot.buscar_por_nome("Diario/*.md", vault_path=str(vault))
+    assert resultado == ["Diario/2026-07-30.md"]
+
+
+def test_buscar_por_nome_sem_correspondencia(vault):
+    resultado = ot.buscar_por_nome("naoexiste", vault_path=str(vault))
+    assert resultado == []
+
+
+def test_buscar_por_conteudo_encontra_trecho(vault):
+    resultado = ot.buscar_por_conteudo("teste", vault_path=str(vault))
+    assert resultado == [{"caminho": "Projetos/IA/nota.md", "linha": 1, "trecho": "# Nota de teste"}]
+
+
+def test_buscar_por_conteudo_ignora_maiusculas_minusculas(vault):
+    resultado = ot.buscar_por_conteudo("HOJE", vault_path=str(vault))
+    assert resultado == [{"caminho": "Diario/2026-07-30.md", "linha": 1, "trecho": "Diario de hoje."}]
+
+
+def test_buscar_por_conteudo_sem_correspondencia(vault):
+    resultado = ot.buscar_por_conteudo("inexistente", vault_path=str(vault))
+    assert resultado == []
+
+
 @pytest.fixture
 def vault_git(tmp_path):
     remote_path = tmp_path / "remote.git"
