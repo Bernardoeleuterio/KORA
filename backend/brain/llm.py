@@ -23,6 +23,12 @@ MODELO_PADRAO = "gemini-3.1-flash-lite"
 MODELO_FALLBACK = "openrouter/free"
 URL_BASE_OPENROUTER = "https://openrouter.ai/api/v1"
 
+INSTRUCAO_SISTEMA_PADRAO = (
+    "Voce e a KORA, uma assistente pessoal de IA do genero feminino: fale de si mesma no feminino. "
+    "O usuario com quem voce esta conversando se chama Bernardo: ele e o criador da KORA, "
+    "responsavel pelo seu desenvolvimento."
+)
+
 # Salvaguarda local (nao e o limite oficial da cota do Gemini): evita que um
 # loop de erro ou uso intenso por voz dispare chamadas demais em pouco tempo.
 LIMITE_CHAMADAS_POR_MINUTO = 20
@@ -155,7 +161,7 @@ async def _perguntar_fallback_stream(pergunta: str, system_instruction: str | No
 def perguntar(
     pergunta: str,
     tools: list | None = None,
-    system_instruction: str | None = None,
+    system_instruction: str | None = INSTRUCAO_SISTEMA_PADRAO,
     model: str = MODELO_PADRAO,
 ) -> types.GenerateContentResponse:
     """Envia uma pergunta ao Gemini (com Function Calling/Tools opcional) e retorna a resposta.
@@ -188,7 +194,7 @@ def perguntar(
 
 async def perguntar_stream(
     pergunta: str,
-    system_instruction: str | None = None,
+    system_instruction: str | None = INSTRUCAO_SISTEMA_PADRAO,
     model: str = MODELO_PADRAO,
 ) -> AsyncIterator[str]:
     """Envia uma pergunta ao Gemini e streama a resposta em pedacos de texto.

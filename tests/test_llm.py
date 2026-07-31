@@ -297,7 +297,10 @@ def test_perguntar_stream_cai_para_fallback_quando_cota_do_gemini_esgota(monkeyp
 
     chamada = fake_fallback.chat.completions.chamadas[0]
     assert chamada["model"] == llm.MODELO_FALLBACK
-    assert chamada["messages"] == [{"role": "user", "content": "oi"}]
+    assert chamada["messages"] == [
+        {"role": "system", "content": llm.INSTRUCAO_SISTEMA_PADRAO},
+        {"role": "user", "content": "oi"},
+    ]
     assert chamada["stream"] is True
 
 
