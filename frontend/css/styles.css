@@ -200,6 +200,28 @@ body {
     cursor: not-allowed;
 }
 
+.hud-botao-microfone {
+    padding: 0.75rem 1rem;
+    font-size: 1.1rem;
+    line-height: 1;
+}
+
+.hud-botao-microfone-ativo {
+    background: rgba(255, 60, 90, 0.15);
+    border-color: #ff3c5a;
+    color: #ff3c5a;
+    animation: pulsar-microfone 1s ease-in-out infinite;
+}
+
+@keyframes pulsar-microfone {
+    0%, 100% {
+        box-shadow: 0 0 10px rgba(255, 60, 90, 0.3);
+    }
+    50% {
+        box-shadow: 0 0 22px rgba(255, 60, 90, 0.6);
+    }
+}
+
 @media (max-width: 480px) {
     body {
         padding: 0.75rem;

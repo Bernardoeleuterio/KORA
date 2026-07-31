@@ -53,6 +53,7 @@ def test_frontend_index_e_arquivos_estaticos_servidos():
     script = cliente.get("/js/app.js")
     assert script.status_code == 200
     assert "WebSocket" in script.text
+    assert "webkitSpeechRecognition" in script.text
 
     visualizador = cliente.get("/js/visualizer.js")
     assert visualizador.status_code == 200
