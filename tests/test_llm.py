@@ -1,6 +1,7 @@
 import asyncio
 
 import pytest
+from google.genai import errors
 
 from backend.brain import llm
 
@@ -59,13 +60,95 @@ class FakeStreamClient:
         self.aio.models = FakeAsyncModels(chunks)
 
 
+class FakeModelsComErro:
+    def __init__(self, erro):
+        self._erro = erro
+
+    def generate_content(self, model, contents, config):
+        raise self._erro
+
+
+class FakeClientComErro:
+    def __init__(self, erro):
+        self.models = FakeModelsComErro(erro)
+
+
+class FakeAsyncModelsComErro:
+    def __init__(self, erro):
+        self._erro = erro
+
+    async def generate_content_stream(self, model, contents, config):
+        raise self._erro
+
+
+class FakeStreamClientComErro:
+    def __init__(self, erro):
+        self.aio = type("FakeAio", (), {})()
+        self.aio.models = FakeAsyncModelsComErro(erro)
+
+
+class FakeCompletions:
+    def __init__(self, texto):
+        self._texto = texto
+        self.chamadas = []
+
+    def create(self, model, messages):
+        self.chamadas.append({"model": model, "messages": messages})
+        mensagem = type("FakeMensagem", (), {"content": self._texto})()
+        escolha = type("FakeEscolha", (), {"message": mensagem})()
+        return type("FakeChatCompletion", (), {"choices": [escolha]})()
+
+
+class FakeOpenAIClient:
+    def __init__(self, texto):
+        self.chat = type("FakeChat", (), {})()
+        self.chat.completions = FakeCompletions(texto)
+
+
+class FakeAsyncCompletions:
+    def __init__(self, pedacos):
+        self._pedacos = pedacos
+        self.chamadas = []
+
+    async def create(self, model, messages, stream):
+        self.chamadas.append({"model": model, "messages": messages, "stream": stream})
+
+        async def gerador():
+            for pedaco in self._pedacos:
+                delta = type("FakeDelta", (), {"content": pedaco})()
+                escolha = type("FakeEscolha", (), {"delta": delta})()
+                yield type("FakeChunkOpenAI", (), {"choices": [escolha]})()
+
+        return gerador()
+
+
+class FakeAsyncOpenAIClient:
+    def __init__(self, pedacos):
+        self.chat = type("FakeChat", (), {})()
+        self.chat.completions = FakeAsyncCompletions(pedacos)
+
+
+def erro_cota() -> errors.ClientError:
+    return errors.ClientError(429, {"error": {"message": "cota excedida", "status": "RESOURCE_EXHAUSTED"}})
+
+
+def erro_nao_cota() -> errors.ClientError:
+    return errors.ClientError(400, {"error": {"message": "requisicao invalida", "status": "INVALID_ARGUMENT"}})
+
+
 @pytest.fixture(autouse=True)
 def resetar_estado_global():
     llm._client = None
+    llm._client_fallback = None
+    llm._client_fallback_async = None
     llm.uso = llm.UsoGemini()
+    llm.total_chamadas_fallback = 0
     yield
     llm._client = None
+    llm._client_fallback = None
+    llm._client_fallback_async = None
     llm.uso = llm.UsoGemini()
+    llm.total_chamadas_fallback = 0
 
 
 def test_perguntar_sem_api_key_configurada(monkeypatch):
@@ -158,3 +241,71 @@ def test_perguntar_stream_retorna_pedacos_e_registra_uso(monkeypatch):
     assert chamada["model"] == llm.MODELO_PADRAO
     assert chamada["contents"] == "oi"
     assert chamada["config"].tools is None
+
+
+def test_eh_erro_de_cota():
+    assert llm._eh_erro_de_cota(erro_cota()) is True
+    assert llm._eh_erro_de_cota(erro_nao_cota()) is False
+    assert llm._eh_erro_de_cota(ValueError("outra coisa")) is False
+
+
+def test_perguntar_cai_para_fallback_quando_cota_do_gemini_esgota(monkeypatch):
+    monkeypatch.setattr(llm, "_get_client", lambda: FakeClientComErro(erro_cota()))
+    fake_fallback = FakeOpenAIClient("resposta do fallback")
+    monkeypatch.setattr(llm, "_get_client_fallback", lambda: fake_fallback)
+
+    resposta = llm.perguntar("oi", tools=["tool-fake"], system_instruction="seja direto")
+
+    assert resposta.text == "resposta do fallback"
+    assert llm.total_chamadas_fallback == 1
+
+    chamada = fake_fallback.chat.completions.chamadas[0]
+    assert chamada["model"] == llm.MODELO_FALLBACK
+    assert chamada["messages"] == [
+        {"role": "system", "content": "seja direto"},
+        {"role": "user", "content": "oi"},
+    ]
+
+
+def test_perguntar_propaga_erro_que_nao_e_de_cota(monkeypatch):
+    monkeypatch.setattr(llm, "_get_client", lambda: FakeClientComErro(erro_nao_cota()))
+
+    with pytest.raises(errors.ClientError):
+        llm.perguntar("oi")
+
+
+def test_perguntar_fallback_sem_api_key_configurada(monkeypatch):
+    monkeypatch.setattr(llm, "_get_client", lambda: FakeClientComErro(erro_cota()))
+    monkeypatch.setattr(llm.config, "OPENROUTER_API_KEY", "")
+
+    with pytest.raises(RuntimeError):
+        llm.perguntar("oi")
+
+
+def test_perguntar_stream_cai_para_fallback_quando_cota_do_gemini_esgota(monkeypatch):
+    monkeypatch.setattr(llm, "_get_client", lambda: FakeStreamClientComErro(erro_cota()))
+    fake_fallback = FakeAsyncOpenAIClient(["Ola", " fallback"])
+    monkeypatch.setattr(llm, "_get_client_fallback_async", lambda: fake_fallback)
+
+    async def coletar():
+        return [pedaco async for pedaco in llm.perguntar_stream("oi")]
+
+    pedacos = asyncio.run(coletar())
+
+    assert pedacos == ["Ola", " fallback"]
+    assert llm.total_chamadas_fallback == 1
+
+    chamada = fake_fallback.chat.completions.chamadas[0]
+    assert chamada["model"] == llm.MODELO_FALLBACK
+    assert chamada["messages"] == [{"role": "user", "content": "oi"}]
+    assert chamada["stream"] is True
+
+
+def test_perguntar_stream_propaga_erro_que_nao_e_de_cota(monkeypatch):
+    monkeypatch.setattr(llm, "_get_client", lambda: FakeStreamClientComErro(erro_nao_cota()))
+
+    async def coletar():
+        return [pedaco async for pedaco in llm.perguntar_stream("oi")]
+
+    with pytest.raises(errors.ClientError):
+        asyncio.run(coletar())

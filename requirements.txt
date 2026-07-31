@@ -3,6 +3,7 @@ uvicorn[standard]
 websockets
 python-dotenv
 google-genai
+openai
 edge-tts
 GitPython
 psutil
