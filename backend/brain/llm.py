@@ -12,7 +12,7 @@ from backend import config
 
 logger = logging.getLogger("kora.llm")
 
-MODELO_PADRAO = "gemini-flash-latest"
+MODELO_PADRAO = "gemini-3.1-flash-lite"
 
 # Salvaguarda local (nao e o limite oficial da cota do Gemini): evita que um
 # loop de erro ou uso intenso por voz dispare chamadas demais em pouco tempo.
