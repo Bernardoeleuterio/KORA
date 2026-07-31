@@ -2,6 +2,7 @@ const chat = document.getElementById("chat");
 const formulario = document.getElementById("formulario-chat");
 const campoMensagem = document.getElementById("campo-mensagem");
 const botaoEnviar = formulario.querySelector("button");
+const orbe = new OrbeVisualizer(document.getElementById("orbe"));
 
 const protocolo = window.location.protocol === "https:" ? "wss" : "ws";
 const socket = new WebSocket(`${protocolo}://${window.location.host}/ws`);
@@ -27,6 +28,7 @@ function habilitarEntrada(habilitar) {
 
 socket.addEventListener("open", () => {
     habilitarEntrada(true);
+    orbe.setEstado("ocioso");
 });
 
 socket.addEventListener("message", (evento) => {
@@ -35,22 +37,27 @@ socket.addEventListener("message", (evento) => {
     if (dados.tipo === "pedaco") {
         if (!bolhaResposta) {
             bolhaResposta = adicionarMensagem("", "kora");
+            orbe.setEstado("falando");
         }
         bolhaResposta.textContent += dados.texto;
+        orbe.pulso();
         chat.scrollTop = chat.scrollHeight;
     } else if (dados.tipo === "fim") {
         bolhaResposta = null;
         habilitarEntrada(true);
+        orbe.setEstado("ocioso");
     } else if (dados.tipo === "erro") {
         bolhaResposta = null;
         adicionarMensagem(`Erro: ${dados.mensagem}`, "sistema");
         habilitarEntrada(true);
+        orbe.setEstado("ocioso");
     }
 });
 
 socket.addEventListener("close", () => {
     adicionarMensagem("Conexao com o KORA encerrada.", "sistema");
     habilitarEntrada(false);
+    orbe.setEstado("ocioso");
 });
 
 socket.addEventListener("error", () => {
@@ -67,4 +74,5 @@ formulario.addEventListener("submit", (evento) => {
 
     campoMensagem.value = "";
     habilitarEntrada(false);
+    orbe.setEstado("pensando");
 });

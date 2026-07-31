@@ -54,6 +54,14 @@ def test_frontend_index_e_arquivos_estaticos_servidos():
     assert script.status_code == 200
     assert "WebSocket" in script.text
 
+    visualizador = cliente.get("/js/visualizer.js")
+    assert visualizador.status_code == 200
+    assert "OrbeVisualizer" in visualizador.text
+
+    estilos = cliente.get("/css/styles.css")
+    assert estilos.status_code == 200
+    assert "--cor-neon" in estilos.text
+
 
 def test_websocket_streama_pedacos_e_avisa_o_fim(monkeypatch):
     chamadas = []

@@ -2,69 +2,33 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>KORA</title>
-    <style>
-        body {
-            font-family: system-ui, sans-serif;
-            max-width: 640px;
-            margin: 2rem auto;
-            padding: 0 1rem;
-        }
-        #chat {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-            min-height: 300px;
-            max-height: 60vh;
-            overflow-y: auto;
-            border: 1px solid #ccc;
-            border-radius: 8px;
-            padding: 1rem;
-            margin-bottom: 1rem;
-        }
-        .mensagem {
-            padding: 0.5rem 0.75rem;
-            border-radius: 8px;
-            max-width: 80%;
-            white-space: pre-wrap;
-        }
-        .mensagem-usuario {
-            align-self: flex-end;
-            background: #dbeafe;
-        }
-        .mensagem-kora {
-            align-self: flex-start;
-            background: #f1f5f9;
-        }
-        .mensagem-sistema {
-            align-self: center;
-            color: #64748b;
-            font-size: 0.85rem;
-        }
-        #formulario-chat {
-            display: flex;
-            gap: 0.5rem;
-        }
-        #campo-mensagem {
-            flex: 1;
-            padding: 0.5rem;
-        }
-    </style>
+    <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
-    <h1>KORA</h1>
-    <div id="chat"></div>
-    <form id="formulario-chat">
-        <input
-            type="text"
-            id="campo-mensagem"
-            placeholder="Digite sua mensagem..."
-            autocomplete="off"
-            disabled
-        />
-        <button type="submit" disabled>Enviar</button>
-    </form>
+    <div class="hud">
+        <header class="hud-cabecalho">
+            <canvas id="orbe" class="hud-orbe"></canvas>
+            <h1 class="hud-titulo">KORA</h1>
+        </header>
+
+        <main id="chat" class="hud-chat"></main>
+
+        <form id="formulario-chat" class="hud-formulario">
+            <input
+                type="text"
+                id="campo-mensagem"
+                class="hud-campo"
+                placeholder="Digite sua mensagem..."
+                autocomplete="off"
+                disabled
+            />
+            <button type="submit" class="hud-botao" disabled>Enviar</button>
+        </form>
+    </div>
+
+    <script src="js/visualizer.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>
