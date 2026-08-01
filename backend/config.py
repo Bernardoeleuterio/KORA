@@ -13,3 +13,9 @@ GITHUB_REPO = os.getenv("GITHUB_REPO", "")
 OBSIDIAN_VAULT_PATH = os.getenv("OBSIDIAN_VAULT_PATH", "")
 KORA_ACCESS_TOKEN = os.getenv("KORA_ACCESS_TOKEN", "")
 PORT = int(os.getenv("PORT", "8000"))
+
+# Pastas do Vault que o assistente nunca le, escreve, lista ou inclui em
+# buscas (nem sequer aparecem como existentes). Lista separada por virgulas.
+VAULT_PASTAS_BLOQUEADAS = [
+    pasta.strip() for pasta in os.getenv("VAULT_PASTAS_BLOQUEADAS", "Pessoal").split(",") if pasta.strip()
+]

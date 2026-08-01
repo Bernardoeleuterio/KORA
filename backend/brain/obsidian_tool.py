@@ -19,8 +19,15 @@ def _get_vault_root(vault_path: str | None = None) -> Path:
     return Path(root).resolve()
 
 
+def _pasta_bloqueada(relative_path: str) -> bool:
+    partes = Path(relative_path.replace("\\", "/")).parts
+    return bool(partes) and partes[0] in config.VAULT_PASTAS_BLOQUEADAS
+
+
 def _resolve_path(relative_path: str, vault_path: str | None = None) -> tuple[Path, Path]:
     root = _get_vault_root(vault_path)
+    if _pasta_bloqueada(relative_path):
+        raise VaultError(f"Pasta bloqueada para o assistente: {relative_path}")
     target = (root / relative_path.replace("\\", "/")).resolve()
     if target != root and root not in target.parents:
         raise VaultError(f"Caminho fora do Vault: {relative_path}")
@@ -36,21 +43,34 @@ def read_note(relative_path: str, vault_path: str | None = None) -> str:
 
 
 def list_notes(subfolder: str = "", vault_path: str | None = None) -> list[str]:
-    """Lista, recursivamente, os caminhos relativos de todas as notas .md a partir de subfolder."""
+    """Lista, recursivamente, os caminhos relativos de todas as notas .md a partir de subfolder.
+
+    Notas dentro de pastas bloqueadas (`config.VAULT_PASTAS_BLOQUEADAS`) nunca
+    aparecem no resultado, mesmo em uma listagem recursiva a partir da raiz.
+    """
     root, target = _resolve_path(subfolder, vault_path)
     if not target.is_dir():
         raise FileNotFoundError(f"Pasta nao encontrada: {subfolder}")
-    return sorted(p.relative_to(root).as_posix() for p in target.rglob("*.md"))
+    notas = (p.relative_to(root).as_posix() for p in target.rglob("*.md"))
+    return sorted(nota for nota in notas if not _pasta_bloqueada(nota))
 
 
 def list_folder(subfolder: str = "", vault_path: str | None = None) -> dict:
-    """Lista os arquivos e subpastas imediatos de uma pasta do Vault."""
+    """Lista os arquivos e subpastas imediatos de uma pasta do Vault.
+
+    Subpastas bloqueadas (`config.VAULT_PASTAS_BLOQUEADAS`) nunca aparecem
+    na listagem, mesmo que a pasta atual nao esteja bloqueada.
+    """
     _, target = _resolve_path(subfolder, vault_path)
     if not target.is_dir():
         raise FileNotFoundError(f"Pasta nao encontrada: {subfolder}")
     entradas = list(target.iterdir())
     return {
-        "pastas": sorted(p.name for p in entradas if p.is_dir() and not p.name.startswith(".")),
+        "pastas": sorted(
+            p.name
+            for p in entradas
+            if p.is_dir() and not p.name.startswith(".") and p.name not in config.VAULT_PASTAS_BLOQUEADAS
+        ),
         "arquivos": sorted(p.name for p in entradas if p.is_file() and not p.name.startswith(".")),
     }
 

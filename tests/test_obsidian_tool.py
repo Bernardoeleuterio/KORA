@@ -8,9 +8,11 @@ from backend.brain import obsidian_tool as ot
 def vault(tmp_path):
     (tmp_path / "Projetos" / "IA").mkdir(parents=True)
     (tmp_path / "Diario").mkdir()
+    (tmp_path / "Pessoal").mkdir()
     (tmp_path / "Projetos" / "IA" / "nota.md").write_text("# Nota de teste\nConteudo.", encoding="utf-8")
     (tmp_path / "Diario" / "2026-07-30.md").write_text("Diario de hoje.", encoding="utf-8")
     (tmp_path / "Projetos" / "leia.txt").write_text("nao e markdown", encoding="utf-8")
+    (tmp_path / "Pessoal" / "segredo.md").write_text("informacao sensivel sobre teste", encoding="utf-8")
     return tmp_path
 
 
@@ -87,6 +89,59 @@ def test_buscar_por_conteudo_ignora_maiusculas_minusculas(vault):
 def test_buscar_por_conteudo_sem_correspondencia(vault):
     resultado = ot.buscar_por_conteudo("inexistente", vault_path=str(vault))
     assert resultado == []
+
+
+def test_read_note_recusa_pasta_bloqueada(vault):
+    with pytest.raises(ot.VaultError):
+        ot.read_note("Pessoal/segredo.md", vault_path=str(vault))
+
+
+def test_write_note_recusa_pasta_bloqueada(vault):
+    with pytest.raises(ot.VaultError):
+        ot.write_note("Pessoal/nova.md", "conteudo", vault_path=str(vault))
+
+
+def test_list_folder_recusa_navegar_para_pasta_bloqueada(vault):
+    with pytest.raises(ot.VaultError):
+        ot.list_folder("Pessoal", vault_path=str(vault))
+
+
+def test_list_notes_recusa_navegar_para_pasta_bloqueada(vault):
+    with pytest.raises(ot.VaultError):
+        ot.list_notes("Pessoal", vault_path=str(vault))
+
+
+def test_list_folder_raiz_oculta_pasta_bloqueada(vault):
+    resultado = ot.list_folder(vault_path=str(vault))
+    assert "Pessoal" not in resultado["pastas"]
+    assert resultado["pastas"] == ["Diario", "Projetos"]
+
+
+def test_list_notes_raiz_nao_inclui_notas_de_pasta_bloqueada(vault):
+    resultado = ot.list_notes(vault_path=str(vault))
+    assert "Pessoal/segredo.md" not in resultado
+    assert resultado == ["Diario/2026-07-30.md", "Projetos/IA/nota.md"]
+
+
+def test_buscar_por_nome_nao_encontra_nota_em_pasta_bloqueada(vault):
+    resultado = ot.buscar_por_nome("segredo", vault_path=str(vault))
+    assert resultado == []
+
+
+def test_buscar_por_conteudo_nao_encontra_nota_em_pasta_bloqueada(vault):
+    resultado = ot.buscar_por_conteudo("sensivel", vault_path=str(vault))
+    assert resultado == []
+
+
+def test_pastas_bloqueadas_sao_configuraveis(monkeypatch, vault):
+    monkeypatch.setattr(ot.config, "VAULT_PASTAS_BLOQUEADAS", ["Projetos"])
+
+    # "Projetos" passa a ser bloqueada e "Pessoal" passa a ser liberada
+    with pytest.raises(ot.VaultError):
+        ot.read_note("Projetos/IA/nota.md", vault_path=str(vault))
+
+    conteudo = ot.read_note("Pessoal/segredo.md", vault_path=str(vault))
+    assert "sensivel" in conteudo
 
 
 @pytest.fixture

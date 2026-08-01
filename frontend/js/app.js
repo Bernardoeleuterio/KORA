@@ -6,8 +6,23 @@ const botaoMicrofone = document.getElementById("botao-microfone");
 const botaoVoz = document.getElementById("botao-voz");
 const orbe = new OrbeVisualizer(document.getElementById("orbe"));
 
+// Token de acesso: pedido uma vez e guardado no navegador. Se o servidor nao
+// exigir token (KORA_ACCESS_TOKEN nao configurado), o valor vazio e ignorado.
+function obterTokenDeAcesso() {
+    let token = window.localStorage.getItem("kora_token");
+    if (token === null) {
+        token = window.prompt("Token de acesso do KORA (deixe em branco se nao houver):") || "";
+        window.localStorage.setItem("kora_token", token);
+    }
+    return token;
+}
+
+const tokenDeAcesso = obterTokenDeAcesso();
+
 const protocolo = window.location.protocol === "https:" ? "wss" : "ws";
-const socket = new WebSocket(`${protocolo}://${window.location.host}/ws`);
+const socket = new WebSocket(
+    `${protocolo}://${window.location.host}/ws?token=${encodeURIComponent(tokenDeAcesso)}`
+);
 socket.binaryType = "arraybuffer";
 
 let bolhaResposta = null;
@@ -143,8 +158,13 @@ socket.addEventListener("message", (evento) => {
     }
 });
 
-socket.addEventListener("close", () => {
-    adicionarMensagem("Conexao com o KORA encerrada.", "sistema");
+socket.addEventListener("close", (evento) => {
+    if (evento.code === 1008) {
+        window.localStorage.removeItem("kora_token");
+        adicionarMensagem("Token de acesso invalido. Recarregue a pagina para tentar de novo.", "sistema");
+    } else {
+        adicionarMensagem("Conexao com o KORA encerrada.", "sistema");
+    }
     habilitarEntrada(false);
     orbe.setEstado("ocioso");
 });

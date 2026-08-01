@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -23,21 +23,37 @@ class RespostaChat(BaseModel):
     resposta: str
 
 
+def exigir_token_http(authorization: str | None = Header(default=None)) -> None:
+    """Exige o header `Authorization: Bearer <token>` quando KORA_ACCESS_TOKEN estiver configurado."""
+    if not config.KORA_ACCESS_TOKEN:
+        return
+    if authorization != f"Bearer {config.KORA_ACCESS_TOKEN}":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token de acesso invalido ou ausente")
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
 
 
-@app.post("/chat", response_model=RespostaChat)
+@app.post("/chat", response_model=RespostaChat, dependencies=[Depends(exigir_token_http)])
 def chat(corpo: MensagemChat) -> RespostaChat:
     resposta = llm.perguntar(corpo.mensagem, tools=tools.FERRAMENTAS)
     return RespostaChat(resposta=resposta.text)
 
 
 @app.websocket("/ws")
-async def chat_websocket(websocket: WebSocket) -> None:
+async def chat_websocket(websocket: WebSocket, token: str | None = Query(default=None)) -> None:
     """Streama a resposta do Gemini em pedacos de texto e, se `voz` for pedido, envia o audio depois (em binario)."""
     await websocket.accept()
+
+    if config.KORA_ACCESS_TOKEN and token != config.KORA_ACCESS_TOKEN:
+        # O handshake do WebSocket precisa ser aceito antes de fechar com um
+        # codigo especifico; fechar antes do accept() produz um encerramento
+        # anormal (1006) em vez do codigo 1008 esperado pelo frontend.
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
     try:
         while True:
             dados = await websocket.receive_json()

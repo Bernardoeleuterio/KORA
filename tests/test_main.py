@@ -1,4 +1,7 @@
+import pytest
+from fastapi import status
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from backend import main
 from backend.brain import llm
@@ -7,6 +10,12 @@ from backend.brain import llm
 class FakeResponse:
     def __init__(self, text):
         self.text = text
+
+
+@pytest.fixture(autouse=True)
+def sem_token_de_acesso_por_padrao(monkeypatch):
+    """Torna os testes independentes do KORA_ACCESS_TOKEN configurado no .env real."""
+    monkeypatch.setattr(main.config, "KORA_ACCESS_TOKEN", "")
 
 
 def test_health():
@@ -55,6 +64,7 @@ def test_frontend_index_e_arquivos_estaticos_servidos():
     assert "WebSocket" in script.text
     assert "webkitSpeechRecognition" in script.text
     assert "botao-voz" in script.text
+    assert "kora_token" in script.text
 
     visualizador = cliente.get("/js/visualizer.js")
     assert visualizador.status_code == 200
@@ -157,4 +167,77 @@ def test_websocket_nao_sintetiza_audio_sem_pedido_de_voz(monkeypatch):
         websocket.receive_json()
         fim = websocket.receive_json()
 
+    assert fim == {"tipo": "fim"}
+
+
+def test_chat_sem_token_e_rejeitado_quando_token_esta_configurado(monkeypatch):
+    monkeypatch.setattr(main.config, "KORA_ACCESS_TOKEN", "segredo-teste")
+
+    cliente = TestClient(main.app)
+    resposta = cliente.post("/chat", json={"mensagem": "oi"})
+
+    assert resposta.status_code == 401
+
+
+def test_chat_com_token_errado_e_rejeitado(monkeypatch):
+    monkeypatch.setattr(main.config, "KORA_ACCESS_TOKEN", "segredo-teste")
+
+    cliente = TestClient(main.app)
+    resposta = cliente.post(
+        "/chat", json={"mensagem": "oi"}, headers={"Authorization": "Bearer errado"}
+    )
+
+    assert resposta.status_code == 401
+
+
+def test_chat_com_token_correto_funciona(monkeypatch):
+    monkeypatch.setattr(main.config, "KORA_ACCESS_TOKEN", "segredo-teste")
+    monkeypatch.setattr(main.llm, "perguntar", lambda mensagem, tools=None: FakeResponse("ok"))
+
+    cliente = TestClient(main.app)
+    resposta = cliente.post(
+        "/chat", json={"mensagem": "oi"}, headers={"Authorization": "Bearer segredo-teste"}
+    )
+
+    assert resposta.status_code == 200
+    assert resposta.json() == {"resposta": "ok"}
+
+
+def test_websocket_sem_token_e_recusado_quando_token_esta_configurado(monkeypatch):
+    monkeypatch.setattr(main.config, "KORA_ACCESS_TOKEN", "segredo-teste")
+
+    cliente = TestClient(main.app)
+    with pytest.raises(WebSocketDisconnect) as excinfo:
+        with cliente.websocket_connect("/ws") as websocket:
+            websocket.receive_json()
+
+    assert excinfo.value.code == status.WS_1008_POLICY_VIOLATION
+
+
+def test_websocket_com_token_errado_e_recusado(monkeypatch):
+    monkeypatch.setattr(main.config, "KORA_ACCESS_TOKEN", "segredo-teste")
+
+    cliente = TestClient(main.app)
+    with pytest.raises(WebSocketDisconnect) as excinfo:
+        with cliente.websocket_connect("/ws?token=errado") as websocket:
+            websocket.receive_json()
+
+    assert excinfo.value.code == status.WS_1008_POLICY_VIOLATION
+
+
+def test_websocket_com_token_correto_funciona(monkeypatch):
+    monkeypatch.setattr(main.config, "KORA_ACCESS_TOKEN", "segredo-teste")
+
+    async def fake_perguntar_stream(mensagem):
+        yield "ok"
+
+    monkeypatch.setattr(main.llm, "perguntar_stream", fake_perguntar_stream)
+
+    cliente = TestClient(main.app)
+    with cliente.websocket_connect("/ws?token=segredo-teste") as websocket:
+        websocket.send_json({"mensagem": "oi"})
+        pedaco = websocket.receive_json()
+        fim = websocket.receive_json()
+
+    assert pedaco == {"tipo": "pedaco", "texto": "ok"}
     assert fim == {"tipo": "fim"}
