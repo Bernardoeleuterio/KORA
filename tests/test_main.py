@@ -74,6 +74,20 @@ def test_frontend_index_e_arquivos_estaticos_servidos():
     assert estilos.status_code == 200
     assert "--cor-neon" in estilos.text
 
+    assert "manifest.json" in pagina.text
+    manifesto = cliente.get("/manifest.json")
+    assert manifesto.status_code == 200
+    assert manifesto.json()["name"] == "KORA"
+    assert manifesto.json()["display"] == "standalone"
+
+    service_worker = cliente.get("/sw.js")
+    assert service_worker.status_code == 200
+    assert "addEventListener" in service_worker.text
+
+    icone = cliente.get("/icons/icon-192.png")
+    assert icone.status_code == 200
+    assert icone.headers["content-type"] == "image/png"
+
 
 def test_websocket_streama_pedacos_e_avisa_o_fim(monkeypatch):
     chamadas = []

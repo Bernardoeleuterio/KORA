@@ -1,3 +1,9 @@
+if ("serviceWorker" in navigator) {
+    navigator.serviceWorker
+        .register("sw.js")
+        .catch((erro) => console.error("Falha ao registrar service worker:", erro));
+}
+
 const chat = document.getElementById("chat");
 const formulario = document.getElementById("formulario-chat");
 const campoMensagem = document.getElementById("campo-mensagem");
