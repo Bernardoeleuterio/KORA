@@ -93,13 +93,17 @@ if (ClasseReconhecimentoDeVoz) {
         botaoMicrofone.classList.remove("hud-botao-microfone-ativo");
 
         if (evento.error === "not-allowed" || evento.error === "service-not-allowed") {
-            // Permissao negada nao muda sozinha nesta sessao — desabilita o
-            // botao em vez de deixar o usuario repetir o mesmo erro a cada clique.
+            // A permissao nao muda sozinha sem uma nova tentativa — desabilita
+            // o botao em vez de deixar o usuario repetir o mesmo erro a cada
+            // clique. reativarMicrofoneSePermitido() (abaixo) volta a habilitar
+            // automaticamente assim que o usuario liberar o microfone nas
+            // configuracoes do site, sem precisar recarregar a pagina.
             microfoneBloqueadoPermanentemente = true;
             botaoMicrofone.disabled = true;
             botaoMicrofone.title = "Permissao de microfone negada";
             adicionarMensagem(
-                "Permissao de microfone negada. Verifique as permissoes do site no navegador para usar a entrada por voz.",
+                "Permissao de microfone negada. Libere o acesso ao microfone nas configuracoes do site " +
+                    "(icone de cadeado, ao lado do endereco) — o botao volta a funcionar automaticamente.",
                 "sistema"
             );
             return;
@@ -120,6 +124,27 @@ if (ClasseReconhecimentoDeVoz) {
             reconhecimentoDeVoz.start();
         }
     });
+
+    // Reativa o microfone sozinho se o usuario liberar a permissao depois de
+    // um erro "not-allowed", sem precisar recarregar a pagina. Nem todo
+    // navegador suporta consultar a permissao de "microphone" (ex: Safari) —
+    // falha em silencio nesse caso, o usuario ainda pode recarregar a pagina.
+    if (navigator.permissions && navigator.permissions.query) {
+        navigator.permissions
+            .query({ name: "microphone" })
+            .then((status) => {
+                status.addEventListener("change", () => {
+                    if (status.state === "granted" && microfoneBloqueadoPermanentemente) {
+                        microfoneBloqueadoPermanentemente = false;
+                        botaoMicrofone.title = "Falar";
+                        if (!campoMensagem.disabled) {
+                            botaoMicrofone.disabled = false;
+                        }
+                    }
+                });
+            })
+            .catch(() => {});
+    }
 } else {
     botaoMicrofone.style.display = "none";
 }
