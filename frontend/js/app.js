@@ -60,6 +60,7 @@ atualizarBotaoVoz();
 const ClasseReconhecimentoDeVoz = window.SpeechRecognition || window.webkitSpeechRecognition;
 let reconhecimentoDeVoz = null;
 let escutando = false;
+let microfoneBloqueadoPermanentemente = false;
 
 if (ClasseReconhecimentoDeVoz) {
     reconhecimentoDeVoz = new ClasseReconhecimentoDeVoz();
@@ -90,6 +91,25 @@ if (ClasseReconhecimentoDeVoz) {
     reconhecimentoDeVoz.addEventListener("error", (evento) => {
         escutando = false;
         botaoMicrofone.classList.remove("hud-botao-microfone-ativo");
+
+        if (evento.error === "not-allowed" || evento.error === "service-not-allowed") {
+            // Permissao negada nao muda sozinha nesta sessao — desabilita o
+            // botao em vez de deixar o usuario repetir o mesmo erro a cada clique.
+            microfoneBloqueadoPermanentemente = true;
+            botaoMicrofone.disabled = true;
+            botaoMicrofone.title = "Permissao de microfone negada";
+            adicionarMensagem(
+                "Permissao de microfone negada. Verifique as permissoes do site no navegador para usar a entrada por voz.",
+                "sistema"
+            );
+            return;
+        }
+
+        if (evento.error === "no-speech" || evento.error === "aborted") {
+            // Casos benignos (silencio, cancelamento) — nao precisa poluir o chat.
+            return;
+        }
+
         adicionarMensagem(`Erro no reconhecimento de voz: ${evento.error}`, "sistema");
     });
 
@@ -117,7 +137,7 @@ function habilitarEntrada(habilitar) {
     campoMensagem.disabled = !habilitar;
     botaoEnviar.disabled = !habilitar;
     if (ClasseReconhecimentoDeVoz) {
-        botaoMicrofone.disabled = !habilitar;
+        botaoMicrofone.disabled = !habilitar || microfoneBloqueadoPermanentemente;
     }
     if (habilitar) {
         campoMensagem.focus();
