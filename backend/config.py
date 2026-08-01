@@ -25,3 +25,9 @@ VAULT_PASTAS_BLOQUEADAS = [
 # — assim como o Vault, so que sem um "GitHub" para recuperar depois. Migrar
 # para armazenamento persistente e um passo futuro se isso for um problema.
 HISTORICO_DB_PATH = os.getenv("HISTORICO_DB_PATH", "kora_historico.db")
+
+# Arquivo SQLite com o indice de embeddings das notas do Vault (busca
+# semantica). Mesma limitacao de disco nao persistente em producao: e
+# reconstruido automaticamente (so as notas novas/alteradas sao reprocessadas,
+# por hash de conteudo) na primeira busca apos um cold start.
+INDICE_SEMANTICO_DB_PATH = os.getenv("INDICE_SEMANTICO_DB_PATH", "kora_indice_semantico.db")

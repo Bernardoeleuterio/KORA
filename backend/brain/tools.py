@@ -5,7 +5,7 @@ schema a partir da assinatura e da docstring (secao "Args") e chama a funcao
 Python automaticamente quando o modelo decide usa-la.
 """
 
-from backend.brain import obsidian_tool
+from backend.brain import busca_semantica, obsidian_tool
 
 
 def ler_nota(caminho_relativo: str) -> str:
@@ -70,6 +70,19 @@ def buscar_notas_por_conteudo(termo: str) -> list[dict]:
     return obsidian_tool.buscar_por_conteudo(termo)
 
 
+def buscar_notas_por_significado(consulta: str) -> list[dict]:
+    """Busca as notas do Vault mais relevantes por significado (RAG), nao so por palavra exata.
+
+    Use esta ferramenta quando buscar_notas_por_nome e buscar_notas_por_conteudo
+    nao encontrarem nada, ou quando o usuario descrever um assunto/ideia em vez
+    de citar uma palavra especifica que deveria estar na nota.
+
+    Args:
+        consulta: pergunta ou descricao do assunto a procurar no Vault.
+    """
+    return busca_semantica.buscar_por_significado(consulta)
+
+
 FERRAMENTAS = [
     ler_nota,
     listar_notas,
@@ -77,4 +90,5 @@ FERRAMENTAS = [
     criar_ou_editar_nota,
     buscar_notas_por_nome,
     buscar_notas_por_conteudo,
+    buscar_notas_por_significado,
 ]

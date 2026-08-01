@@ -80,6 +80,21 @@ def test_buscar_notas_por_conteudo_chama_obsidian_tool(monkeypatch):
     assert chamadas == ["IA"]
 
 
+def test_buscar_notas_por_significado_chama_busca_semantica(monkeypatch):
+    chamadas = []
+    resultado_esperado = [{"caminho": "a.md", "pontuacao": 0.9}]
+    monkeypatch.setattr(
+        tools.busca_semantica,
+        "buscar_por_significado",
+        lambda consulta: chamadas.append(consulta) or resultado_esperado,
+    )
+
+    resultado = tools.buscar_notas_por_significado("assunto sobre IA")
+
+    assert resultado == resultado_esperado
+    assert chamadas == ["assunto sobre IA"]
+
+
 def test_ferramentas_registra_todas_as_funcoes():
     assert tools.FERRAMENTAS == [
         tools.ler_nota,
@@ -88,4 +103,5 @@ def test_ferramentas_registra_todas_as_funcoes():
         tools.criar_ou_editar_nota,
         tools.buscar_notas_por_nome,
         tools.buscar_notas_por_conteudo,
+        tools.buscar_notas_por_significado,
     ]
