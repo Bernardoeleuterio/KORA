@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from backend import config
-from backend.brain import llm, tools
+from backend.brain import historico, llm, tools
 from backend.voice import tts
 
 DIRETORIO_FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
@@ -38,7 +38,10 @@ def health() -> dict:
 
 @app.post("/chat", response_model=RespostaChat, dependencies=[Depends(exigir_token_http)])
 def chat(corpo: MensagemChat) -> RespostaChat:
-    resposta = llm.perguntar(corpo.mensagem, tools=tools.FERRAMENTAS)
+    turnos_anteriores = historico.carregar_recentes()
+    resposta = llm.perguntar(corpo.mensagem, tools=tools.FERRAMENTAS, historico=turnos_anteriores)
+    historico.salvar_turno("usuario", corpo.mensagem)
+    historico.salvar_turno("kora", resposta.text)
     return RespostaChat(resposta=resposta.text)
 
 
@@ -60,14 +63,19 @@ async def chat_websocket(websocket: WebSocket, token: str | None = Query(default
             mensagem = dados.get("mensagem", "")
             voz = bool(dados.get("voz", False))
             try:
+                turnos_anteriores = historico.carregar_recentes()
                 pedacos_resposta = []
-                async for pedaco in llm.perguntar_stream(mensagem):
+                async for pedaco in llm.perguntar_stream(mensagem, historico=turnos_anteriores):
                     pedacos_resposta.append(pedaco)
                     await websocket.send_json({"tipo": "pedaco", "texto": pedaco})
                 await websocket.send_json({"tipo": "fim"})
 
+                resposta_completa = "".join(pedacos_resposta)
+                historico.salvar_turno("usuario", mensagem)
+                historico.salvar_turno("kora", resposta_completa)
+
                 if voz and pedacos_resposta:
-                    audio = await tts.sintetizar("".join(pedacos_resposta))
+                    audio = await tts.sintetizar(resposta_completa)
                     await websocket.send_bytes(audio)
             except Exception as erro:
                 await websocket.send_json({"tipo": "erro", "mensagem": str(erro)})

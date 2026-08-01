@@ -6,6 +6,10 @@ from google.genai import errors
 from backend.brain import llm
 
 
+def _texto_dos_conteudos(conteudo):
+    return [(c.role, c.parts[0].text) for c in conteudo]
+
+
 class FakeUsageMetadata:
     def __init__(self, prompt_tokens=10, response_tokens=5):
         self.prompt_token_count = prompt_tokens
@@ -171,7 +175,26 @@ def test_perguntar_retorna_resposta_e_registra_uso(monkeypatch):
 
     chamada = fake_client.models.chamadas[0]
     assert chamada["model"] == llm.MODELO_PADRAO
-    assert chamada["contents"] == "qual e a capital da franca?"
+    assert _texto_dos_conteudos(chamada["contents"]) == [("user", "qual e a capital da franca?")]
+
+
+def test_perguntar_inclui_historico_antes_da_pergunta(monkeypatch):
+    monkeypatch.setattr(llm.config, "GEMINI_API_KEY", "chave-fake")
+    fake_client = FakeClient(FakeResponse())
+    monkeypatch.setattr(llm, "_get_client", lambda: fake_client)
+
+    historico = [
+        {"papel": "usuario", "conteudo": "meu cachorro se chama Rex"},
+        {"papel": "kora", "conteudo": "legal, vou lembrar do Rex"},
+    ]
+    llm.perguntar("qual e o nome do meu cachorro?", historico=historico)
+
+    chamada = fake_client.models.chamadas[0]
+    assert _texto_dos_conteudos(chamada["contents"]) == [
+        ("user", "meu cachorro se chama Rex"),
+        ("model", "legal, vou lembrar do Rex"),
+        ("user", "qual e o nome do meu cachorro?"),
+    ]
 
 
 def test_perguntar_passa_tools_e_system_instruction(monkeypatch):
@@ -239,8 +262,29 @@ def test_perguntar_stream_retorna_pedacos_e_registra_uso(monkeypatch):
 
     chamada = fake_client.aio.models.chamadas[0]
     assert chamada["model"] == llm.MODELO_PADRAO
-    assert chamada["contents"] == "oi"
+    assert _texto_dos_conteudos(chamada["contents"]) == [("user", "oi")]
     assert chamada["config"].tools is None
+
+
+def test_perguntar_stream_inclui_historico_antes_da_pergunta(monkeypatch):
+    monkeypatch.setattr(llm.config, "GEMINI_API_KEY", "chave-fake")
+    chunks = [FakeStreamChunk("ok", FakeUsageMetadata(5, 3))]
+    fake_client = FakeStreamClient(chunks)
+    monkeypatch.setattr(llm, "_get_client", lambda: fake_client)
+
+    historico = [{"papel": "usuario", "conteudo": "oi"}, {"papel": "kora", "conteudo": "ola!"}]
+
+    async def coletar():
+        return [pedaco async for pedaco in llm.perguntar_stream("tudo bem?", historico=historico)]
+
+    asyncio.run(coletar())
+
+    chamada = fake_client.aio.models.chamadas[0]
+    assert _texto_dos_conteudos(chamada["contents"]) == [
+        ("user", "oi"),
+        ("model", "ola!"),
+        ("user", "tudo bem?"),
+    ]
 
 
 def test_eh_erro_de_cota():

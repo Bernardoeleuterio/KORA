@@ -115,10 +115,22 @@ def _eh_erro_de_cota(erro: Exception) -> bool:
     return isinstance(erro, errors.ClientError) and erro.code == 429
 
 
-def _montar_mensagens(pergunta: str, system_instruction: str | None) -> list[dict]:
+def _montar_conteudo_gemini(pergunta: str, historico: list[dict] | None) -> list[types.Content]:
+    conteudo = [
+        types.Content(role="model" if turno["papel"] == "kora" else "user", parts=[types.Part(text=turno["conteudo"])])
+        for turno in historico or []
+    ]
+    conteudo.append(types.Content(role="user", parts=[types.Part(text=pergunta)]))
+    return conteudo
+
+
+def _montar_mensagens(pergunta: str, system_instruction: str | None, historico: list[dict] | None = None) -> list[dict]:
     mensagens = []
     if system_instruction:
         mensagens.append({"role": "system", "content": system_instruction})
+    for turno in historico or []:
+        papel = "assistant" if turno["papel"] == "kora" else "user"
+        mensagens.append({"role": papel, "content": turno["conteudo"]})
     mensagens.append({"role": "user", "content": pergunta})
     return mensagens
 
@@ -137,19 +149,23 @@ class RespostaFallback:
         self.usage_metadata = None
 
 
-def _perguntar_fallback(pergunta: str, system_instruction: str | None = None) -> RespostaFallback:
+def _perguntar_fallback(
+    pergunta: str, system_instruction: str | None = None, historico: list[dict] | None = None
+) -> RespostaFallback:
     cliente = _get_client_fallback()
     resposta = cliente.chat.completions.create(
-        model=MODELO_FALLBACK, messages=_montar_mensagens(pergunta, system_instruction)
+        model=MODELO_FALLBACK, messages=_montar_mensagens(pergunta, system_instruction, historico)
     )
     _registrar_uso_fallback()
     return RespostaFallback(resposta.choices[0].message.content)
 
 
-async def _perguntar_fallback_stream(pergunta: str, system_instruction: str | None = None) -> AsyncIterator[str]:
+async def _perguntar_fallback_stream(
+    pergunta: str, system_instruction: str | None = None, historico: list[dict] | None = None
+) -> AsyncIterator[str]:
     cliente = _get_client_fallback_async()
     stream = await cliente.chat.completions.create(
-        model=MODELO_FALLBACK, messages=_montar_mensagens(pergunta, system_instruction), stream=True
+        model=MODELO_FALLBACK, messages=_montar_mensagens(pergunta, system_instruction, historico), stream=True
     )
     async for chunk in stream:
         pedaco = chunk.choices[0].delta.content
@@ -163,8 +179,13 @@ def perguntar(
     tools: list | None = None,
     system_instruction: str | None = INSTRUCAO_SISTEMA_PADRAO,
     model: str = MODELO_PADRAO,
+    historico: list[dict] | None = None,
 ) -> types.GenerateContentResponse:
     """Envia uma pergunta ao Gemini (com Function Calling/Tools opcional) e retorna a resposta.
+
+    `historico`, se informado, e uma lista de turnos anteriores (formato
+    `{"papel": "usuario"|"kora", "conteudo": str}`, ver backend/brain/historico.py)
+    incluida antes de `pergunta`, para o modelo manter contexto entre sessoes.
 
     Se a cota do Gemini estiver esgotada (HTTP 429), cai automaticamente para
     o fallback (`MODELO_FALLBACK`, via OpenRouter). O fallback nao suporta
@@ -175,8 +196,9 @@ def perguntar(
 
     client = _get_client()
     cfg = types.GenerateContentConfig(tools=tools, system_instruction=system_instruction)
+    conteudo = _montar_conteudo_gemini(pergunta, historico)
     try:
-        resposta = client.models.generate_content(model=model, contents=pergunta, config=cfg)
+        resposta = client.models.generate_content(model=model, contents=conteudo, config=cfg)
     except errors.ClientError as erro:
         if not _eh_erro_de_cota(erro):
             raise
@@ -186,7 +208,7 @@ def perguntar(
                 MODELO_FALLBACK,
             )
         logger.warning("Gemini indisponivel (cota excedida); usando fallback %s", MODELO_FALLBACK)
-        return _perguntar_fallback(pergunta, system_instruction)
+        return _perguntar_fallback(pergunta, system_instruction, historico)
 
     uso.registrar_uso(resposta.usage_metadata)
     return resposta
@@ -196,8 +218,13 @@ async def perguntar_stream(
     pergunta: str,
     system_instruction: str | None = INSTRUCAO_SISTEMA_PADRAO,
     model: str = MODELO_PADRAO,
+    historico: list[dict] | None = None,
 ) -> AsyncIterator[str]:
     """Envia uma pergunta ao Gemini e streama a resposta em pedacos de texto.
+
+    `historico`, se informado, e uma lista de turnos anteriores (ver
+    backend/brain/historico.py) incluida antes de `pergunta`, para o modelo
+    manter contexto entre sessoes.
 
     Nao aceita `tools`: no SDK google-genai instalado, o Function Calling
     automatico perde a resposta da ferramenta quando combinado com streaming
@@ -212,14 +239,15 @@ async def perguntar_stream(
 
     client = _get_client()
     cfg = types.GenerateContentConfig(system_instruction=system_instruction)
+    conteudo = _montar_conteudo_gemini(pergunta, historico)
 
     try:
-        stream = await client.aio.models.generate_content_stream(model=model, contents=pergunta, config=cfg)
+        stream = await client.aio.models.generate_content_stream(model=model, contents=conteudo, config=cfg)
     except errors.ClientError as erro:
         if not _eh_erro_de_cota(erro):
             raise
         logger.warning("Gemini indisponivel (cota excedida); usando fallback %s em streaming", MODELO_FALLBACK)
-        async for pedaco in _perguntar_fallback_stream(pergunta, system_instruction):
+        async for pedaco in _perguntar_fallback_stream(pergunta, system_instruction, historico):
             yield pedaco
         return
 

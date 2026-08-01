@@ -19,3 +19,9 @@ PORT = int(os.getenv("PORT", "8000"))
 VAULT_PASTAS_BLOQUEADAS = [
     pasta.strip() for pasta in os.getenv("VAULT_PASTAS_BLOQUEADAS", "Pessoal").split(",") if pasta.strip()
 ]
+
+# Arquivo SQLite com o historico de conversa entre sessoes. Em producao no
+# Render (disco nao persistente), esse arquivo e perdido a cada cold start
+# — assim como o Vault, so que sem um "GitHub" para recuperar depois. Migrar
+# para armazenamento persistente e um passo futuro se isso for um problema.
+HISTORICO_DB_PATH = os.getenv("HISTORICO_DB_PATH", "kora_historico.db")

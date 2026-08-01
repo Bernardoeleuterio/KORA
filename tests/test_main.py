@@ -18,6 +18,12 @@ def sem_token_de_acesso_por_padrao(monkeypatch):
     monkeypatch.setattr(main.config, "KORA_ACCESS_TOKEN", "")
 
 
+@pytest.fixture(autouse=True)
+def banco_de_historico_isolado(monkeypatch, tmp_path):
+    """Evita que os testes leiam/escrevam no banco de historico real do projeto."""
+    monkeypatch.setattr(main.config, "HISTORICO_DB_PATH", str(tmp_path / "teste_historico.db"))
+
+
 def test_health():
     cliente = TestClient(main.app)
 
@@ -30,8 +36,8 @@ def test_health():
 def test_chat_retorna_resposta_do_gemini(monkeypatch):
     chamadas = []
 
-    def fake_perguntar(mensagem, tools=None):
-        chamadas.append((mensagem, tools))
+    def fake_perguntar(mensagem, tools=None, historico=None):
+        chamadas.append((mensagem, tools, historico))
         return FakeResponse("resposta de teste")
 
     monkeypatch.setattr(main.llm, "perguntar", fake_perguntar)
@@ -41,7 +47,13 @@ def test_chat_retorna_resposta_do_gemini(monkeypatch):
 
     assert resposta.status_code == 200
     assert resposta.json() == {"resposta": "resposta de teste"}
-    assert chamadas == [("ola kora", main.tools.FERRAMENTAS)]
+    assert chamadas == [("ola kora", main.tools.FERRAMENTAS, [])]
+
+    turnos_salvos = main.historico.carregar_recentes()
+    assert turnos_salvos == [
+        {"papel": "usuario", "conteudo": "ola kora"},
+        {"papel": "kora", "conteudo": "resposta de teste"},
+    ]
 
 
 def test_chat_valida_corpo_da_requisicao():
@@ -92,8 +104,8 @@ def test_frontend_index_e_arquivos_estaticos_servidos():
 def test_websocket_streama_pedacos_e_avisa_o_fim(monkeypatch):
     chamadas = []
 
-    async def fake_perguntar_stream(mensagem):
-        chamadas.append(mensagem)
+    async def fake_perguntar_stream(mensagem, historico=None):
+        chamadas.append((mensagem, historico))
         for pedaco in ["Ola", " mundo"]:
             yield pedaco
 
@@ -106,14 +118,20 @@ def test_websocket_streama_pedacos_e_avisa_o_fim(monkeypatch):
         pedaco2 = websocket.receive_json()
         fim = websocket.receive_json()
 
-    assert chamadas == ["oi"]
+    assert chamadas == [("oi", [])]
     assert pedaco1 == {"tipo": "pedaco", "texto": "Ola"}
     assert pedaco2 == {"tipo": "pedaco", "texto": " mundo"}
     assert fim == {"tipo": "fim"}
 
+    turnos_salvos = main.historico.carregar_recentes()
+    assert turnos_salvos == [
+        {"papel": "usuario", "conteudo": "oi"},
+        {"papel": "kora", "conteudo": "Ola mundo"},
+    ]
+
 
 def test_websocket_avisa_erro_sem_derrubar_a_conexao(monkeypatch):
-    async def fake_perguntar_stream_com_erro(mensagem):
+    async def fake_perguntar_stream_com_erro(mensagem, historico=None):
         raise RuntimeError("cota da API excedida")
         yield  # pragma: no cover - torna a funcao um gerador async
 
@@ -125,7 +143,7 @@ def test_websocket_avisa_erro_sem_derrubar_a_conexao(monkeypatch):
         erro = websocket.receive_json()
 
         # a conexao continua utilizavel apos o erro
-        async def fake_perguntar_stream_ok(mensagem):
+        async def fake_perguntar_stream_ok(mensagem, historico=None):
             yield "tudo bem agora"
 
         monkeypatch.setattr(main.llm, "perguntar_stream", fake_perguntar_stream_ok)
@@ -139,7 +157,7 @@ def test_websocket_avisa_erro_sem_derrubar_a_conexao(monkeypatch):
 
 
 def test_websocket_envia_audio_quando_voz_e_pedida(monkeypatch):
-    async def fake_perguntar_stream(mensagem):
+    async def fake_perguntar_stream(mensagem, historico=None):
         for pedaco in ["Ola", " mundo"]:
             yield pedaco
 
@@ -166,7 +184,7 @@ def test_websocket_envia_audio_quando_voz_e_pedida(monkeypatch):
 
 
 def test_websocket_nao_sintetiza_audio_sem_pedido_de_voz(monkeypatch):
-    async def fake_perguntar_stream(mensagem):
+    async def fake_perguntar_stream(mensagem, historico=None):
         yield "Ola"
 
     async def tts_nao_deveria_ser_chamado(texto):
@@ -206,7 +224,7 @@ def test_chat_com_token_errado_e_rejeitado(monkeypatch):
 
 def test_chat_com_token_correto_funciona(monkeypatch):
     monkeypatch.setattr(main.config, "KORA_ACCESS_TOKEN", "segredo-teste")
-    monkeypatch.setattr(main.llm, "perguntar", lambda mensagem, tools=None: FakeResponse("ok"))
+    monkeypatch.setattr(main.llm, "perguntar", lambda mensagem, tools=None, historico=None: FakeResponse("ok"))
 
     cliente = TestClient(main.app)
     resposta = cliente.post(
@@ -242,7 +260,7 @@ def test_websocket_com_token_errado_e_recusado(monkeypatch):
 def test_websocket_com_token_correto_funciona(monkeypatch):
     monkeypatch.setattr(main.config, "KORA_ACCESS_TOKEN", "segredo-teste")
 
-    async def fake_perguntar_stream(mensagem):
+    async def fake_perguntar_stream(mensagem, historico=None):
         yield "ok"
 
     monkeypatch.setattr(main.llm, "perguntar_stream", fake_perguntar_stream)
