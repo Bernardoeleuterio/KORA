@@ -235,6 +235,50 @@ def test_chat_com_token_correto_funciona(monkeypatch):
     assert resposta.json() == {"resposta": "ok"}
 
 
+def test_agente_briefing_sem_token_e_rejeitado_quando_token_esta_configurado(monkeypatch):
+    monkeypatch.setattr(main.config, "KORA_ACCESS_TOKEN", "segredo-teste")
+
+    cliente = TestClient(main.app)
+    resposta = cliente.post("/agente/briefing")
+
+    assert resposta.status_code == 401
+
+
+def test_agente_briefing_com_token_correto_gera_e_retorna_o_briefing(monkeypatch):
+    chamadas = []
+    monkeypatch.setattr(main.briefing, "gerar_briefing", lambda: chamadas.append(1) or "briefing de teste")
+
+    cliente = TestClient(main.app)
+    resposta = cliente.post("/agente/briefing")
+
+    assert resposta.status_code == 200
+    assert resposta.json() == {"briefing": "briefing de teste", "audio_base64": None}
+    assert len(chamadas) == 1
+
+
+def test_agente_briefing_com_voz_inclui_audio_em_base64(monkeypatch):
+    import base64
+
+    monkeypatch.setattr(main.briefing, "gerar_briefing", lambda: "briefing de teste")
+
+    chamadas_tts = []
+
+    async def fake_sintetizar(texto):
+        chamadas_tts.append(texto)
+        return b"audio-fake"
+
+    monkeypatch.setattr(main.tts, "sintetizar", fake_sintetizar)
+
+    cliente = TestClient(main.app)
+    resposta = cliente.post("/agente/briefing?voz=true")
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["briefing"] == "briefing de teste"
+    assert base64.b64decode(corpo["audio_base64"]) == b"audio-fake"
+    assert chamadas_tts == ["briefing de teste"]
+
+
 def test_websocket_sem_token_e_recusado_quando_token_esta_configurado(monkeypatch):
     monkeypatch.setattr(main.config, "KORA_ACCESS_TOKEN", "segredo-teste")
 

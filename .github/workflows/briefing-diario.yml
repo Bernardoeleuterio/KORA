@@ -1,0 +1,20 @@
+name: Briefing diario do KORA
+
+# Agendador do agente proativo (Etapa 18). O plano gratuito do Render
+# hiberna apos inatividade e nao tem cron interno confiavel sozinho — este
+# workflow "acorda" o servico e dispara o briefing na hora certa, sem
+# precisar de nenhum servico externo pago.
+"on":
+  schedule:
+    - cron: "0 10 * * *" # 07:00 horario de Brasilia (UTC-3), todos os dias
+  workflow_dispatch: {} # permite disparar manualmente pela aba Actions
+
+jobs:
+  disparar-briefing:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar POST /agente/briefing do KORA
+        run: |
+          curl -sf -X POST "https://kora-ez58.onrender.com/agente/briefing" \
+            -H "Authorization: Bearer ${{ secrets.KORA_ACCESS_TOKEN }}" \
+            --max-time 150

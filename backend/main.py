@@ -1,5 +1,6 @@
 """Servidor FastAPI do KORA: rotas de chat (texto e WebSocket) e frontend estatico."""
 
+import base64
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect, status
@@ -7,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from backend import config
-from backend.brain import historico, llm, tools
+from backend.brain import briefing, historico, llm, tools
 from backend.voice import tts
 
 DIRETORIO_FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
@@ -21,6 +22,11 @@ class MensagemChat(BaseModel):
 
 class RespostaChat(BaseModel):
     resposta: str
+
+
+class RespostaBriefing(BaseModel):
+    briefing: str
+    audio_base64: str | None = None
 
 
 def exigir_token_http(authorization: str | None = Header(default=None)) -> None:
@@ -43,6 +49,24 @@ def chat(corpo: MensagemChat) -> RespostaChat:
     historico.salvar_turno("usuario", corpo.mensagem)
     historico.salvar_turno("kora", resposta.text)
     return RespostaChat(resposta=resposta.text)
+
+
+@app.post("/agente/briefing", response_model=RespostaBriefing, dependencies=[Depends(exigir_token_http)])
+async def agente_briefing(voz: bool = False) -> RespostaBriefing:
+    """Gera o briefing diario (le o Diario recente, resume via Gemini, salva no Vault).
+
+    Pensado para ser chamado por um agendador externo (Etapa 18) — o Render
+    free tier hiberna e nao roda cron interno de forma confiavel sozinho.
+    Com `?voz=true`, sintetiza o audio do texto ja gerado (Etapa 12) e retorna
+    junto em base64 — sem depender de Function Calling, que nao funciona no
+    modo streaming usado pelo `/ws` (limitacao da Etapa 8).
+    """
+    texto = briefing.gerar_briefing()
+    audio_base64 = None
+    if voz:
+        audio = await tts.sintetizar(texto)
+        audio_base64 = base64.b64encode(audio).decode("ascii")
+    return RespostaBriefing(briefing=texto, audio_base64=audio_base64)
 
 
 @app.websocket("/ws")
