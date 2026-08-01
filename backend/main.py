@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from backend import config
 from backend.brain import llm, tools
+from backend.voice import tts
 
 DIRETORIO_FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
 
@@ -35,16 +36,23 @@ def chat(corpo: MensagemChat) -> RespostaChat:
 
 @app.websocket("/ws")
 async def chat_websocket(websocket: WebSocket) -> None:
-    """Streama a resposta do Gemini em pedacos de texto conforme sao gerados."""
+    """Streama a resposta do Gemini em pedacos de texto e, se `voz` for pedido, envia o audio depois (em binario)."""
     await websocket.accept()
     try:
         while True:
             dados = await websocket.receive_json()
             mensagem = dados.get("mensagem", "")
+            voz = bool(dados.get("voz", False))
             try:
+                pedacos_resposta = []
                 async for pedaco in llm.perguntar_stream(mensagem):
+                    pedacos_resposta.append(pedaco)
                     await websocket.send_json({"tipo": "pedaco", "texto": pedaco})
                 await websocket.send_json({"tipo": "fim"})
+
+                if voz and pedacos_resposta:
+                    audio = await tts.sintetizar("".join(pedacos_resposta))
+                    await websocket.send_bytes(audio)
             except Exception as erro:
                 await websocket.send_json({"tipo": "erro", "mensagem": str(erro)})
     except WebSocketDisconnect:

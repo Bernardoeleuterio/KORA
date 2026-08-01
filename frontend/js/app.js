@@ -3,12 +3,34 @@ const formulario = document.getElementById("formulario-chat");
 const campoMensagem = document.getElementById("campo-mensagem");
 const botaoEnviar = formulario.querySelector("button[type=submit]");
 const botaoMicrofone = document.getElementById("botao-microfone");
+const botaoVoz = document.getElementById("botao-voz");
 const orbe = new OrbeVisualizer(document.getElementById("orbe"));
 
 const protocolo = window.location.protocol === "https:" ? "wss" : "ws";
 const socket = new WebSocket(`${protocolo}://${window.location.host}/ws`);
+socket.binaryType = "arraybuffer";
 
 let bolhaResposta = null;
+
+// Modo Silencioso: comeca desativado (sem audio) ate o usuario ligar a voz,
+// evitando reproducao inesperada de audio (e possiveis bloqueios de autoplay
+// do navegador) antes de uma interacao explicita.
+let vozAtiva = false;
+
+function atualizarBotaoVoz() {
+    botaoVoz.textContent = vozAtiva ? "🔊" : "🔇";
+    botaoVoz.classList.toggle("hud-botao-voz-ativa", vozAtiva);
+    botaoVoz.title = vozAtiva
+        ? "Voz ativada (clique para silenciar)"
+        : "Modo silencioso (clique para ativar a voz)";
+}
+
+botaoVoz.addEventListener("click", () => {
+    vozAtiva = !vozAtiva;
+    atualizarBotaoVoz();
+});
+
+atualizarBotaoVoz();
 
 // Entrada de voz (Web Speech API): suportada no Chrome/Edge (desktop e Android)
 // via webkitSpeechRecognition. Sem suporte no Firefox e inconsistente no
@@ -87,6 +109,18 @@ socket.addEventListener("open", () => {
 });
 
 socket.addEventListener("message", (evento) => {
+    if (evento.data instanceof ArrayBuffer) {
+        const url = URL.createObjectURL(new Blob([evento.data], { type: "audio/mpeg" }));
+        const audio = new Audio(url);
+        orbe.setEstado("falando");
+        audio.addEventListener("ended", () => {
+            URL.revokeObjectURL(url);
+            orbe.setEstado("ocioso");
+        });
+        audio.play().catch((erro) => console.error("Falha ao reproduzir audio:", erro));
+        return;
+    }
+
     const dados = JSON.parse(evento.data);
 
     if (dados.tipo === "pedaco") {
@@ -125,7 +159,7 @@ formulario.addEventListener("submit", (evento) => {
     if (!mensagem) return;
 
     adicionarMensagem(mensagem, "usuario");
-    socket.send(JSON.stringify({ mensagem }));
+    socket.send(JSON.stringify({ mensagem, voz: vozAtiva }));
 
     campoMensagem.value = "";
     habilitarEntrada(false);

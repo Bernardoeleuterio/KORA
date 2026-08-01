@@ -34,6 +34,7 @@ body {
 }
 
 .hud {
+    position: relative;
     width: 100%;
     max-width: 640px;
     display: flex;
@@ -55,6 +56,35 @@ body {
     flex-direction: column;
     align-items: center;
     gap: 0.4rem;
+}
+
+.hud-botao-voz {
+    position: absolute;
+    top: 1.2rem;
+    right: 1.2rem;
+    width: 2.2rem;
+    height: 2.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 229, 255, 0.25);
+    background: rgba(0, 0, 0, 0.3);
+    color: var(--cor-texto-fraco);
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background 0.2s, box-shadow 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.hud-botao-voz:hover {
+    border-color: var(--cor-neon);
+}
+
+.hud-botao-voz-ativa {
+    color: var(--cor-neon);
+    border-color: var(--cor-neon);
+    box-shadow: 0 0 14px rgba(0, 229, 255, 0.35);
 }
 
 .hud-orbe {

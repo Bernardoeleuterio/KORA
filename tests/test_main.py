@@ -54,6 +54,7 @@ def test_frontend_index_e_arquivos_estaticos_servidos():
     assert script.status_code == 200
     assert "WebSocket" in script.text
     assert "webkitSpeechRecognition" in script.text
+    assert "botao-voz" in script.text
 
     visualizador = cliente.get("/js/visualizer.js")
     assert visualizador.status_code == 200
@@ -110,4 +111,50 @@ def test_websocket_avisa_erro_sem_derrubar_a_conexao(monkeypatch):
 
     assert erro == {"tipo": "erro", "mensagem": "cota da API excedida"}
     assert pedaco == {"tipo": "pedaco", "texto": "tudo bem agora"}
+    assert fim == {"tipo": "fim"}
+
+
+def test_websocket_envia_audio_quando_voz_e_pedida(monkeypatch):
+    async def fake_perguntar_stream(mensagem):
+        for pedaco in ["Ola", " mundo"]:
+            yield pedaco
+
+    chamadas_tts = []
+
+    async def fake_sintetizar(texto):
+        chamadas_tts.append(texto)
+        return b"audio-fake"
+
+    monkeypatch.setattr(main.llm, "perguntar_stream", fake_perguntar_stream)
+    monkeypatch.setattr(main.tts, "sintetizar", fake_sintetizar)
+
+    cliente = TestClient(main.app)
+    with cliente.websocket_connect("/ws") as websocket:
+        websocket.send_json({"mensagem": "oi", "voz": True})
+        websocket.receive_json()
+        websocket.receive_json()
+        fim = websocket.receive_json()
+        audio = websocket.receive_bytes()
+
+    assert fim == {"tipo": "fim"}
+    assert audio == b"audio-fake"
+    assert chamadas_tts == ["Ola mundo"]
+
+
+def test_websocket_nao_sintetiza_audio_sem_pedido_de_voz(monkeypatch):
+    async def fake_perguntar_stream(mensagem):
+        yield "Ola"
+
+    async def tts_nao_deveria_ser_chamado(texto):
+        raise AssertionError("tts.sintetizar nao deveria ser chamado quando voz nao foi pedida")
+
+    monkeypatch.setattr(main.llm, "perguntar_stream", fake_perguntar_stream)
+    monkeypatch.setattr(main.tts, "sintetizar", tts_nao_deveria_ser_chamado)
+
+    cliente = TestClient(main.app)
+    with cliente.websocket_connect("/ws") as websocket:
+        websocket.send_json({"mensagem": "oi"})
+        websocket.receive_json()
+        fim = websocket.receive_json()
+
     assert fim == {"tipo": "fim"}
