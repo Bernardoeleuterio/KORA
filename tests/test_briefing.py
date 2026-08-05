@@ -1,4 +1,4 @@
-from backend.brain import briefing
+from backend.brain import briefing, google_agenda
 
 
 class FakeResposta:
@@ -6,7 +6,12 @@ class FakeResposta:
         self.text = text
 
 
+def _sem_eventos(*args, **kwargs):
+    return []
+
+
 def test_gerar_briefing_le_notas_recentes_e_gera_texto(monkeypatch):
+    monkeypatch.setattr(briefing.google_agenda, "listar_eventos", _sem_eventos)
     monkeypatch.setattr(
         briefing.obsidian_tool, "list_notes", lambda pasta, vault_path=None: ["Diario/2026-07-30.md", "Diario/2026-07-31.md"]
     )
@@ -36,6 +41,7 @@ def test_gerar_briefing_le_notas_recentes_e_gera_texto(monkeypatch):
 
 
 def test_gerar_briefing_considera_so_as_notas_mais_recentes(monkeypatch):
+    monkeypatch.setattr(briefing.google_agenda, "listar_eventos", _sem_eventos)
     caminhos_todos = [f"Diario/2026-07-{dia:02d}.md" for dia in range(1, 11)]
     monkeypatch.setattr(briefing.obsidian_tool, "list_notes", lambda pasta, vault_path=None: caminhos_todos)
     lidos = []
@@ -51,6 +57,7 @@ def test_gerar_briefing_considera_so_as_notas_mais_recentes(monkeypatch):
 
 
 def test_gerar_briefing_sem_notas_no_diario(monkeypatch):
+    monkeypatch.setattr(briefing.google_agenda, "listar_eventos", _sem_eventos)
     monkeypatch.setattr(briefing.obsidian_tool, "list_notes", lambda pasta, vault_path=None: [])
     monkeypatch.setattr(briefing.obsidian_tool, "write_note", lambda *a, **k: None)
 
@@ -69,6 +76,7 @@ def test_gerar_briefing_sem_notas_no_diario(monkeypatch):
 
 
 def test_gerar_briefing_salva_nota_no_vault_por_padrao(monkeypatch):
+    monkeypatch.setattr(briefing.google_agenda, "listar_eventos", _sem_eventos)
     monkeypatch.setattr(briefing.obsidian_tool, "list_notes", lambda pasta, vault_path=None: [])
     monkeypatch.setattr(briefing.llm, "perguntar", lambda pergunta, system_instruction=None: FakeResposta("briefing de teste"))
 
@@ -91,6 +99,7 @@ def test_gerar_briefing_salva_nota_no_vault_por_padrao(monkeypatch):
 
 
 def test_gerar_briefing_nao_salva_quando_desativado(monkeypatch):
+    monkeypatch.setattr(briefing.google_agenda, "listar_eventos", _sem_eventos)
     monkeypatch.setattr(briefing.obsidian_tool, "list_notes", lambda pasta, vault_path=None: [])
     monkeypatch.setattr(briefing.llm, "perguntar", lambda pergunta, system_instruction=None: FakeResposta("ok"))
 
@@ -100,3 +109,44 @@ def test_gerar_briefing_nao_salva_quando_desativado(monkeypatch):
     monkeypatch.setattr(briefing.obsidian_tool, "write_note", falha_se_chamado)
 
     briefing.gerar_briefing(salvar_no_vault=False)
+
+
+def test_gerar_briefing_inclui_eventos_da_agenda(monkeypatch):
+    monkeypatch.setattr(
+        briefing.google_agenda,
+        "listar_eventos",
+        lambda: [{"titulo": "Reuniao com o time", "inicio": "2026-08-05T10:00:00-03:00", "fim": "2026-08-05T11:00:00-03:00"}],
+    )
+    monkeypatch.setattr(briefing.obsidian_tool, "list_notes", lambda pasta, vault_path=None: [])
+    monkeypatch.setattr(briefing.obsidian_tool, "write_note", lambda *a, **k: None)
+
+    chamadas = []
+    monkeypatch.setattr(
+        briefing.llm,
+        "perguntar",
+        lambda pergunta, system_instruction=None: chamadas.append(pergunta) or FakeResposta("ok"),
+    )
+
+    briefing.gerar_briefing()
+
+    assert "Reuniao com o time" in chamadas[0]
+
+
+def test_gerar_briefing_com_agenda_nao_configurada(monkeypatch):
+    def falha_nao_configurado():
+        raise google_agenda.GoogleAgendaError("nao configurado")
+
+    monkeypatch.setattr(briefing.google_agenda, "listar_eventos", falha_nao_configurado)
+    monkeypatch.setattr(briefing.obsidian_tool, "list_notes", lambda pasta, vault_path=None: [])
+    monkeypatch.setattr(briefing.obsidian_tool, "write_note", lambda *a, **k: None)
+
+    chamadas = []
+    monkeypatch.setattr(
+        briefing.llm,
+        "perguntar",
+        lambda pergunta, system_instruction=None: chamadas.append(pergunta) or FakeResposta("ok"),
+    )
+
+    briefing.gerar_briefing()
+
+    assert "Google Agenda nao configurado" in chamadas[0]

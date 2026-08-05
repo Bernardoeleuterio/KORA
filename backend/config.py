@@ -31,3 +31,12 @@ HISTORICO_DB_PATH = os.getenv("HISTORICO_DB_PATH", "kora_historico.db")
 # reconstruido automaticamente (so as notas novas/alteradas sao reprocessadas,
 # por hash de conteudo) na primeira busca apos um cold start.
 INDICE_SEMANTICO_DB_PATH = os.getenv("INDICE_SEMANTICO_DB_PATH", "kora_indice_semantico.db")
+
+# Credenciais OAuth do Google Agenda (Etapa 19). GOOGLE_CLIENT_ID/SECRET vem
+# da credencial "Desktop app" criada no Google Cloud Console; GOOGLE_REFRESH_TOKEN
+# e gerado uma unica vez pelo scripts/autorizar_google_agenda.py (autorizacao
+# manual pelo navegador) e depois reutilizado pelo backend sem interacao, do
+# mesmo jeito que o GITHUB_TOKEN (Etapa 14).
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_REFRESH_TOKEN = os.getenv("GOOGLE_REFRESH_TOKEN", "")

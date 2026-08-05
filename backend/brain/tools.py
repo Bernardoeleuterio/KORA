@@ -5,7 +5,9 @@ schema a partir da assinatura e da docstring (secao "Args") e chama a funcao
 Python automaticamente quando o modelo decide usa-la.
 """
 
-from backend.brain import busca_semantica, obsidian_tool
+from datetime import datetime, timedelta
+
+from backend.brain import busca_semantica, google_agenda, obsidian_tool
 
 
 def ler_nota(caminho_relativo: str) -> str:
@@ -83,6 +85,28 @@ def buscar_notas_por_significado(consulta: str) -> list[dict]:
     return busca_semantica.buscar_por_significado(consulta)
 
 
+def listar_eventos_agenda(dias: int = 1) -> list[dict]:
+    """Lista os proximos eventos do Google Agenda dentro dos proximos N dias, a partir de agora.
+
+    Args:
+        dias: quantidade de dias a frente para buscar eventos (padrao: 1, ou seja, so as proximas 24h).
+    """
+    agora = datetime.now().astimezone()
+    return google_agenda.listar_eventos(agora, agora + timedelta(days=dias))
+
+
+def criar_evento_agenda(titulo: str, inicio: str, fim: str, descricao: str = "") -> dict:
+    """Cria um evento no Google Agenda.
+
+    Args:
+        titulo: titulo do evento.
+        inicio: data/hora de inicio em ISO 8601, ex: "2026-08-10T14:00:00-03:00".
+        fim: data/hora de fim em ISO 8601, ex: "2026-08-10T15:00:00-03:00".
+        descricao: descricao opcional do evento.
+    """
+    return google_agenda.criar_evento(titulo, datetime.fromisoformat(inicio), datetime.fromisoformat(fim), descricao)
+
+
 FERRAMENTAS = [
     ler_nota,
     listar_notas,
@@ -91,4 +115,6 @@ FERRAMENTAS = [
     buscar_notas_por_nome,
     buscar_notas_por_conteudo,
     buscar_notas_por_significado,
+    listar_eventos_agenda,
+    criar_evento_agenda,
 ]

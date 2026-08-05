@@ -95,6 +95,46 @@ def test_buscar_notas_por_significado_chama_busca_semantica(monkeypatch):
     assert chamadas == ["assunto sobre IA"]
 
 
+def test_listar_eventos_agenda_chama_google_agenda(monkeypatch):
+    chamadas = []
+    monkeypatch.setattr(
+        tools.google_agenda,
+        "listar_eventos",
+        lambda inicio, fim: chamadas.append((inicio, fim)) or [{"titulo": "Reuniao"}],
+    )
+
+    resultado = tools.listar_eventos_agenda(dias=3)
+
+    assert resultado == [{"titulo": "Reuniao"}]
+    assert len(chamadas) == 1
+    inicio, fim = chamadas[0]
+    assert (fim - inicio).days == 3
+
+
+def test_criar_evento_agenda_chama_google_agenda(monkeypatch):
+    chamadas = []
+    monkeypatch.setattr(
+        tools.google_agenda,
+        "criar_evento",
+        lambda titulo, inicio, fim, descricao="": chamadas.append((titulo, inicio, fim, descricao))
+        or {"id": "evt1", "titulo": titulo},
+    )
+
+    resultado = tools.criar_evento_agenda(
+        "Dentista", "2026-08-10T14:00:00-03:00", "2026-08-10T15:00:00-03:00", "Consulta"
+    )
+
+    assert resultado == {"id": "evt1", "titulo": "Dentista"}
+    assert chamadas == [
+        (
+            "Dentista",
+            tools.datetime.fromisoformat("2026-08-10T14:00:00-03:00"),
+            tools.datetime.fromisoformat("2026-08-10T15:00:00-03:00"),
+            "Consulta",
+        )
+    ]
+
+
 def test_ferramentas_registra_todas_as_funcoes():
     assert tools.FERRAMENTAS == [
         tools.ler_nota,
@@ -104,4 +144,6 @@ def test_ferramentas_registra_todas_as_funcoes():
         tools.buscar_notas_por_nome,
         tools.buscar_notas_por_conteudo,
         tools.buscar_notas_por_significado,
+        tools.listar_eventos_agenda,
+        tools.criar_evento_agenda,
     ]
