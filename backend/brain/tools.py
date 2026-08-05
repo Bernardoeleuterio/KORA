@@ -107,6 +107,16 @@ def criar_evento_agenda(titulo: str, inicio: str, fim: str, descricao: str = "")
     return google_agenda.criar_evento(titulo, datetime.fromisoformat(inicio), datetime.fromisoformat(fim), descricao)
 
 
+def remover_evento_agenda(evento_id: str) -> str:
+    """Remove um evento do Google Agenda pelo id.
+
+    Args:
+        evento_id: id do evento a remover (retornado por listar_eventos_agenda ou criar_evento_agenda).
+    """
+    google_agenda.remover_evento(evento_id)
+    return f"Evento {evento_id} removido"
+
+
 FERRAMENTAS = [
     ler_nota,
     listar_notas,
@@ -117,4 +127,5 @@ FERRAMENTAS = [
     buscar_notas_por_significado,
     listar_eventos_agenda,
     criar_evento_agenda,
+    remover_evento_agenda,
 ]

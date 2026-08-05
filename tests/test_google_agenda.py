@@ -17,6 +17,7 @@ class FakeEventos:
     def __init__(self, resposta_list=None):
         self.resposta_list = resposta_list or {"items": []}
         self.chamadas_insert = []
+        self.chamadas_delete = []
 
     def list(self, **kwargs):
         return FakeEventosExecutor(self.resposta_list)
@@ -24,6 +25,10 @@ class FakeEventos:
     def insert(self, calendarId, body):
         self.chamadas_insert.append((calendarId, body))
         return FakeEventosExecutor({"id": "evt123", "summary": body["summary"], "start": body["start"], "end": body["end"]})
+
+    def delete(self, calendarId, eventId):
+        self.chamadas_delete.append((calendarId, eventId))
+        return FakeEventosExecutor(None)
 
 
 class FakeServico:
@@ -122,6 +127,16 @@ def test_criar_evento_envia_corpo_correto_e_retorna_evento_criado(monkeypatch):
     assert corpo["end"]["dateTime"] == datetime(2026, 8, 10, 15, 0).isoformat()
     assert resultado["id"] == "evt123"
     assert resultado["titulo"] == "Dentista"
+
+
+def test_remover_evento_chama_delete_com_id_correto(monkeypatch):
+    _configurar_credenciais(monkeypatch)
+    eventos_fake = FakeEventos()
+    monkeypatch.setattr(google_agenda, "_servico", lambda: FakeServico(eventos_fake))
+
+    google_agenda.remover_evento("evt123")
+
+    assert eventos_fake.chamadas_delete == [("primary", "evt123")]
 
 
 def test_criar_evento_sem_credenciais_configuradas(monkeypatch):

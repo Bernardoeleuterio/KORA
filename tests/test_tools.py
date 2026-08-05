@@ -135,6 +135,18 @@ def test_criar_evento_agenda_chama_google_agenda(monkeypatch):
     ]
 
 
+def test_remover_evento_agenda_chama_google_agenda(monkeypatch):
+    chamadas = []
+    monkeypatch.setattr(
+        tools.google_agenda, "remover_evento", lambda evento_id: chamadas.append(evento_id)
+    )
+
+    resultado = tools.remover_evento_agenda("evt123")
+
+    assert resultado == "Evento evt123 removido"
+    assert chamadas == ["evt123"]
+
+
 def test_ferramentas_registra_todas_as_funcoes():
     assert tools.FERRAMENTAS == [
         tools.ler_nota,
@@ -146,4 +158,5 @@ def test_ferramentas_registra_todas_as_funcoes():
         tools.buscar_notas_por_significado,
         tools.listar_eventos_agenda,
         tools.criar_evento_agenda,
+        tools.remover_evento_agenda,
     ]

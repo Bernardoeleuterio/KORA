@@ -85,3 +85,8 @@ def criar_evento(titulo: str, inicio: datetime, fim: datetime, descricao: str = 
     }
     item = _servico().events().insert(calendarId="primary", body=corpo).execute()
     return _formatar_evento(item)
+
+
+def remover_evento(evento_id: str) -> None:
+    """Remove um evento do calendario primario pelo id."""
+    _servico().events().delete(calendarId="primary", eventId=evento_id).execute()
