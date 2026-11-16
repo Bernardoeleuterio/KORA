@@ -20,17 +20,21 @@ def _get_vault_root(vault_path: str | None = None) -> Path:
 
 
 def _pasta_bloqueada(relative_path: str) -> bool:
+    """Compara sem diferenciar maiusculas/minusculas: no Windows/macOS "pessoal" e "Pessoal" sao a mesma pasta."""
     partes = Path(relative_path.replace("\\", "/")).parts
-    return bool(partes) and partes[0] in config.VAULT_PASTAS_BLOQUEADAS
+    bloqueadas = {pasta.casefold() for pasta in config.VAULT_PASTAS_BLOQUEADAS}
+    return bool(partes) and partes[0].casefold() in bloqueadas
 
 
 def _resolve_path(relative_path: str, vault_path: str | None = None) -> tuple[Path, Path]:
     root = _get_vault_root(vault_path)
-    if _pasta_bloqueada(relative_path):
-        raise VaultError(f"Pasta bloqueada para o assistente: {relative_path}")
     target = (root / relative_path.replace("\\", "/")).resolve()
     if target != root and root not in target.parents:
         raise VaultError(f"Caminho fora do Vault: {relative_path}")
+    # A checagem de pasta bloqueada usa o caminho JA resolvido: checar o texto
+    # recebido deixaria "Diario/../Pessoal/x.md" (ou um symlink) escapar.
+    if target != root and _pasta_bloqueada(target.relative_to(root).as_posix()):
+        raise VaultError(f"Pasta bloqueada para o assistente: {relative_path}")
     return root, target
 
 
@@ -69,7 +73,7 @@ def list_folder(subfolder: str = "", vault_path: str | None = None) -> dict:
         "pastas": sorted(
             p.name
             for p in entradas
-            if p.is_dir() and not p.name.startswith(".") and p.name not in config.VAULT_PASTAS_BLOQUEADAS
+            if p.is_dir() and not p.name.startswith(".") and not _pasta_bloqueada(p.name)
         ),
         "arquivos": sorted(p.name for p in entradas if p.is_file() and not p.name.startswith(".")),
     }

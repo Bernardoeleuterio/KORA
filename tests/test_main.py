@@ -7,15 +7,24 @@ from backend import main
 from backend.brain import llm
 
 
+TOKEN_TESTE = "segredo-teste"
+CABECALHO_AUTH = {"Authorization": f"Bearer {TOKEN_TESTE}"}
+URL_WS = f"/ws?token={TOKEN_TESTE}"
+
+
+def cliente_autenticado() -> TestClient:
+    return TestClient(main.app, headers=CABECALHO_AUTH)
+
+
 class FakeResponse:
     def __init__(self, text):
         self.text = text
 
 
 @pytest.fixture(autouse=True)
-def sem_token_de_acesso_por_padrao(monkeypatch):
+def token_de_acesso_de_teste(monkeypatch):
     """Torna os testes independentes do KORA_ACCESS_TOKEN configurado no .env real."""
-    monkeypatch.setattr(main.config, "KORA_ACCESS_TOKEN", "")
+    monkeypatch.setattr(main.config, "KORA_ACCESS_TOKEN", TOKEN_TESTE)
 
 
 @pytest.fixture(autouse=True)
@@ -42,7 +51,7 @@ def test_chat_retorna_resposta_do_gemini(monkeypatch):
 
     monkeypatch.setattr(main.llm, "perguntar", fake_perguntar)
 
-    cliente = TestClient(main.app)
+    cliente = cliente_autenticado()
     resposta = cliente.post("/chat", json={"mensagem": "ola kora"})
 
     assert resposta.status_code == 200
@@ -57,7 +66,7 @@ def test_chat_retorna_resposta_do_gemini(monkeypatch):
 
 
 def test_chat_valida_corpo_da_requisicao():
-    cliente = TestClient(main.app)
+    cliente = cliente_autenticado()
 
     resposta = cliente.post("/chat", json={})
 
@@ -111,8 +120,8 @@ def test_websocket_streama_pedacos_e_avisa_o_fim(monkeypatch):
 
     monkeypatch.setattr(main.llm, "perguntar_stream", fake_perguntar_stream)
 
-    cliente = TestClient(main.app)
-    with cliente.websocket_connect("/ws") as websocket:
+    cliente = cliente_autenticado()
+    with cliente.websocket_connect(URL_WS) as websocket:
         websocket.send_json({"mensagem": "oi"})
         pedaco1 = websocket.receive_json()
         pedaco2 = websocket.receive_json()
@@ -137,8 +146,8 @@ def test_websocket_avisa_erro_sem_derrubar_a_conexao(monkeypatch):
 
     monkeypatch.setattr(main.llm, "perguntar_stream", fake_perguntar_stream_com_erro)
 
-    cliente = TestClient(main.app)
-    with cliente.websocket_connect("/ws") as websocket:
+    cliente = cliente_autenticado()
+    with cliente.websocket_connect(URL_WS) as websocket:
         websocket.send_json({"mensagem": "oi"})
         erro = websocket.receive_json()
 
@@ -170,8 +179,8 @@ def test_websocket_envia_audio_quando_voz_e_pedida(monkeypatch):
     monkeypatch.setattr(main.llm, "perguntar_stream", fake_perguntar_stream)
     monkeypatch.setattr(main.tts, "sintetizar", fake_sintetizar)
 
-    cliente = TestClient(main.app)
-    with cliente.websocket_connect("/ws") as websocket:
+    cliente = cliente_autenticado()
+    with cliente.websocket_connect(URL_WS) as websocket:
         websocket.send_json({"mensagem": "oi", "voz": True})
         websocket.receive_json()
         websocket.receive_json()
@@ -193,8 +202,8 @@ def test_websocket_nao_sintetiza_audio_sem_pedido_de_voz(monkeypatch):
     monkeypatch.setattr(main.llm, "perguntar_stream", fake_perguntar_stream)
     monkeypatch.setattr(main.tts, "sintetizar", tts_nao_deveria_ser_chamado)
 
-    cliente = TestClient(main.app)
-    with cliente.websocket_connect("/ws") as websocket:
+    cliente = cliente_autenticado()
+    with cliente.websocket_connect(URL_WS) as websocket:
         websocket.send_json({"mensagem": "oi"})
         websocket.receive_json()
         fim = websocket.receive_json()
@@ -248,7 +257,7 @@ def test_agente_briefing_com_token_correto_gera_e_retorna_o_briefing(monkeypatch
     chamadas = []
     monkeypatch.setattr(main.briefing, "gerar_briefing", lambda: chamadas.append(1) or "briefing de teste")
 
-    cliente = TestClient(main.app)
+    cliente = cliente_autenticado()
     resposta = cliente.post("/agente/briefing")
 
     assert resposta.status_code == 200
@@ -269,7 +278,7 @@ def test_agente_briefing_com_voz_inclui_audio_em_base64(monkeypatch):
 
     monkeypatch.setattr(main.tts, "sintetizar", fake_sintetizar)
 
-    cliente = TestClient(main.app)
+    cliente = cliente_autenticado()
     resposta = cliente.post("/agente/briefing?voz=true")
 
     assert resposta.status_code == 200
@@ -317,3 +326,39 @@ def test_websocket_com_token_correto_funciona(monkeypatch):
 
     assert pedaco == {"tipo": "pedaco", "texto": "ok"}
     assert fim == {"tipo": "fim"}
+
+
+def test_chat_recusado_quando_token_nao_esta_configurado(monkeypatch):
+    """Fail-closed: deploy sem KORA_ACCESS_TOKEN nao pode deixar o Vault aberto."""
+    monkeypatch.setattr(main.config, "KORA_ACCESS_TOKEN", "")
+
+    resposta = TestClient(main.app).post("/chat", json={"mensagem": "oi"})
+
+    assert resposta.status_code == 503
+
+
+def test_agente_briefing_recusado_quando_token_nao_esta_configurado(monkeypatch):
+    monkeypatch.setattr(main.config, "KORA_ACCESS_TOKEN", "")
+    monkeypatch.setattr(main.briefing, "gerar_briefing", lambda: pytest.fail("nao deveria gerar"))
+
+    resposta = TestClient(main.app).post("/agente/briefing", headers={"Authorization": "Bearer "})
+
+    assert resposta.status_code == 503
+
+
+def test_websocket_recusado_quando_token_nao_esta_configurado(monkeypatch):
+    monkeypatch.setattr(main.config, "KORA_ACCESS_TOKEN", "")
+
+    with pytest.raises(WebSocketDisconnect) as excinfo:
+        with TestClient(main.app).websocket_connect("/ws?token=") as websocket:
+            websocket.receive_json()
+
+    assert excinfo.value.code == status.WS_1008_POLICY_VIOLATION
+
+
+def test_header_sem_prefixo_bearer_e_rejeitado():
+    resposta = TestClient(main.app).post(
+        "/chat", json={"mensagem": "oi"}, headers={"Authorization": TOKEN_TESTE}
+    )
+
+    assert resposta.status_code == 401

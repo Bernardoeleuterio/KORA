@@ -1,6 +1,7 @@
 """Servidor FastAPI do KORA: rotas de chat (texto e WebSocket) e frontend estatico."""
 
 import base64
+import secrets
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect, status
@@ -29,11 +30,28 @@ class RespostaBriefing(BaseModel):
     audio_base64: str | None = None
 
 
+def token_valido(recebido: str | None) -> bool:
+    """Compara o token recebido com KORA_ACCESS_TOKEN em tempo constante.
+
+    Sem KORA_ACCESS_TOKEN configurado, NADA e aceito (fail-closed): um deploy
+    esquecido sem a variavel nao pode deixar o Vault aberto para a internet.
+    """
+    esperado = config.KORA_ACCESS_TOKEN
+    if not esperado or not recebido:
+        return False
+    return secrets.compare_digest(recebido.encode(), esperado.encode())
+
+
 def exigir_token_http(authorization: str | None = Header(default=None)) -> None:
-    """Exige o header `Authorization: Bearer <token>` quando KORA_ACCESS_TOKEN estiver configurado."""
+    """Exige o header `Authorization: Bearer <token>` valido em todas as rotas protegidas."""
     if not config.KORA_ACCESS_TOKEN:
-        return
-    if authorization != f"Bearer {config.KORA_ACCESS_TOKEN}":
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="KORA_ACCESS_TOKEN nao configurado no servidor",
+        )
+    prefixo = "Bearer "
+    recebido = authorization[len(prefixo):] if authorization and authorization.startswith(prefixo) else None
+    if not token_valido(recebido):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token de acesso invalido ou ausente")
 
 
@@ -74,7 +92,7 @@ async def chat_websocket(websocket: WebSocket, token: str | None = Query(default
     """Streama a resposta do Gemini em pedacos de texto e, se `voz` for pedido, envia o audio depois (em binario)."""
     await websocket.accept()
 
-    if config.KORA_ACCESS_TOKEN and token != config.KORA_ACCESS_TOKEN:
+    if not token_valido(token):
         # O handshake do WebSocket precisa ser aceito antes de fechar com um
         # codigo especifico; fechar antes do accept() produz um encerramento
         # anormal (1006) em vez do codigo 1008 esperado pelo frontend.
