@@ -261,7 +261,7 @@ def test_agente_briefing_com_token_correto_gera_e_retorna_o_briefing(monkeypatch
     resposta = cliente.post("/agente/briefing")
 
     assert resposta.status_code == 200
-    assert resposta.json() == {"briefing": "briefing de teste", "audio_base64": None}
+    assert resposta.json() == {"briefing": "briefing de teste", "audio_base64": None, "enviado_telegram": False}
     assert len(chamadas) == 1
 
 

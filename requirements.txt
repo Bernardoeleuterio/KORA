@@ -10,4 +10,5 @@ psutil
 google-auth
 google-auth-oauthlib
 google-api-python-client
+python-telegram-bot>=22,<23
 pytest

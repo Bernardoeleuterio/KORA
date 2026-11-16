@@ -40,3 +40,13 @@ INDICE_SEMANTICO_DB_PATH = os.getenv("INDICE_SEMANTICO_DB_PATH", "kora_indice_se
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 GOOGLE_REFRESH_TOKEN = os.getenv("GOOGLE_REFRESH_TOKEN", "")
+
+# Canal do Telegram. TELEGRAM_TOKEN vem do @BotFather; TELEGRAM_DONO_ID e o
+# user_id numerico do Bernardo (unico usuario atendido). TELEGRAM_WEBHOOK_SECRET
+# protege a rota /telegram/webhook; KORA_URL_PUBLICA (ex:
+# https://kora-ez58.onrender.com) e usada para registrar o webhook no start.
+# Sem TOKEN/DONO_ID, o canal fica desligado e o resto do KORA funciona normal.
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
+TELEGRAM_DONO_ID = int(os.getenv("TELEGRAM_DONO_ID", "0") or 0)
+TELEGRAM_WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
+KORA_URL_PUBLICA = os.getenv("KORA_URL_PUBLICA", "").rstrip("/")
