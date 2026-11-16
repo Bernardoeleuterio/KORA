@@ -210,3 +210,35 @@ def test_write_note_pull_rebase_antes_de_editar(vault_git):
 
     assert (vault_git / "concorrente.md").is_file()
     assert (vault_git / "Diario" / "nova.md").is_file()
+
+
+@pytest.mark.parametrize(
+    "caminho",
+    [
+        "Diario/../Pessoal/segredo.md",  # ".." resolvido depois da checagem
+        "./Pessoal/segredo.md",
+        "Diario\\..\\Pessoal\\segredo.md",
+        "pessoal/segredo.md",  # Windows/macOS: sistema de arquivos ignora maiusculas
+        "PESSOAL/segredo.md",
+    ],
+)
+def test_read_note_recusa_pasta_bloqueada_disfarcada(vault, caminho):
+    with pytest.raises((ot.VaultError, FileNotFoundError)):
+        conteudo = ot.read_note(caminho, vault_path=str(vault))
+        pytest.fail(f"vazou conteudo de pasta bloqueada: {conteudo!r}")
+
+
+def test_write_note_recusa_pasta_bloqueada_via_ponto_ponto(vault):
+    with pytest.raises(ot.VaultError):
+        ot.write_note("Diario/../Pessoal/nova.md", "conteudo", vault_path=str(vault))
+    assert not (vault / "Pessoal" / "nova.md").exists()
+
+
+def test_list_notes_recusa_pasta_bloqueada_via_ponto_ponto(vault):
+    with pytest.raises(ot.VaultError):
+        ot.list_notes("Diario/../Pessoal", vault_path=str(vault))
+
+
+def test_list_folder_oculta_pasta_bloqueada_com_outra_caixa(monkeypatch, vault):
+    monkeypatch.setattr(ot.config, "VAULT_PASTAS_BLOQUEADAS", ["pessoal"])
+    assert "Pessoal" not in ot.list_folder("", vault_path=str(vault))["pastas"]

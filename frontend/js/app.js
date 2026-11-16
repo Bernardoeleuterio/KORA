@@ -12,12 +12,12 @@ const botaoMicrofone = document.getElementById("botao-microfone");
 const botaoVoz = document.getElementById("botao-voz");
 const orbe = new OrbeVisualizer(document.getElementById("orbe"));
 
-// Token de acesso: pedido uma vez e guardado no navegador. Se o servidor nao
-// exigir token (KORA_ACCESS_TOKEN nao configurado), o valor vazio e ignorado.
+// Token de acesso: pedido uma vez e guardado no navegador. O servidor sempre
+// exige o token (KORA_ACCESS_TOKEN); sem ele a conexao e recusada.
 function obterTokenDeAcesso() {
     let token = window.localStorage.getItem("kora_token");
     if (token === null) {
-        token = window.prompt("Token de acesso do KORA (deixe em branco se nao houver):") || "";
+        token = window.prompt("Token de acesso do KORA:") || "";
         window.localStorage.setItem("kora_token", token);
     }
     return token;
